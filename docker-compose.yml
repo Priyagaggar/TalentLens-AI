@@ -1,0 +1,32 @@
+
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: resume_screener_backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://user:password@db/resume_db
+      # Add other config vars here if needed
+    depends_on:
+      - db
+    volumes:
+      - .:/app  # Optional: for hot reloading during dev, though uvicorn needs --reload
+      - ./uploaded_files:/app/uploaded_files
+
+  db:
+    image: postgres:15
+    container_name: resume_screener_db
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=resume_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
