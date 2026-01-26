@@ -2,6 +2,7 @@
 services:
   - type: web
     name: ai-resume-screener
+    plan: free
     runtime: python
     buildCommand: pip install -r requirements.txt && python -m spacy download en_core_web_sm
     startCommand: ./start.sh
@@ -21,6 +22,7 @@ services:
 
   - type: web
     name: talentlens-frontend
+    plan: free
     env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
