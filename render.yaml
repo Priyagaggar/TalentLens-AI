@@ -24,7 +24,6 @@ services:
     env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
-    staticPublishPath: frontend/dist
     routes:
       - type: rewrite
         source: /api/*
