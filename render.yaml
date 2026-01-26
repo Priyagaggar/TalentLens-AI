@@ -1,3 +1,4 @@
+
 services:
   - type: web
     name: ai-resume-screener
@@ -16,14 +17,12 @@ services:
       - key: BACKEND_CORS_ORIGINS
         value: '["*"]'
       - key: OPENAI_API_KEY
-        sync: false
+        sync: false # User must provide this in dashboard
 
-  
-  - type: web
+  - type: static
     name: talentlens-frontend
-    runtime: static
     buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
+    publishDir: frontend/dist
     envVars:
       - key: VITE_API_URL
         fromService:
@@ -35,4 +34,4 @@ databases:
   - name: resume-db
     databaseName: resume_screener
     user: resume_user
-    plan: free
+    plan: free # Uses Render's free tier for Postgres
