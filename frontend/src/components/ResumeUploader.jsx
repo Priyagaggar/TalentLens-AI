@@ -4,7 +4,26 @@ import { Upload, FileText, Trash2, CheckCircle, AlertCircle, Loader2, Sparkles, 
 import ResultsDashboard from './ResultsDashboard';
 import { cn, formatBytes } from '../utils';
 
-const API_BASE_URL = "/api/v1";
+const getApiBaseUrl = () => {
+    let url = import.meta.env.VITE_API_URL;
+    if (!url) return "/api/v1";
+
+    if (!url.startsWith("http") && !url.startsWith("/")) {
+        url = `https://${url}`;
+    }
+
+    if (url.endsWith("/")) {
+        url = url.slice(0, -1);
+    }
+
+    if (!url.endsWith("/api/v1")) {
+        url = `${url}/api/v1`;
+    }
+
+    return url;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 const ResumeUploader = () => {
     const [resumes, setResumes] = useState([]);

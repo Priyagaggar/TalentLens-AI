@@ -12,7 +12,13 @@ from app.db.models import Base, JobDescription, Resume, RankingResult
 
 # Initializing Engine
 # Note: config.DATABASE_URL is "sqlite:///./sql_app.db", for async we need "sqlite+aiosqlite:///..."
-DATABASE_URL = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
+# Handle Render's DATABASE_URL which starts with postgres://
+if settings.DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = settings.DATABASE_URL.replace("postgres://", "postgresql+asyncpg://", 1)
+elif settings.DATABASE_URL.startswith("postgresql://"):
+     DATABASE_URL = settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
+else:
+    DATABASE_URL = settings.DATABASE_URL.replace("sqlite://", "sqlite+aiosqlite://")
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
