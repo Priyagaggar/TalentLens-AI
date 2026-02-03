@@ -8,14 +8,29 @@ const getApiBaseUrl = () => {
     let url = import.meta.env.VITE_API_URL;
     if (!url) return "/api/v1";
 
+    // Prepare URL (ensure protocol)
     if (!url.startsWith("http") && !url.startsWith("/")) {
         url = `https://${url}`;
     }
 
+    // Fix for Render: "host" property usually returns internal hostname (no .onrender.com)
+    // If we are looking at a remote URL (https) that has no dots (e.g. https://my-service-slug),
+    // it is likely an internal Render host. We must append .onrender.com for public access.
+    try {
+        const urlObj = new URL(url);
+        if (urlObj.hostname !== "localhost" && !urlObj.hostname.includes(".")) {
+            url = url.replace(urlObj.hostname, `${urlObj.hostname}.onrender.com`);
+        }
+    } catch (e) {
+        // invalid url, ignore
+    }
+
+    // Clean up trailing slash
     if (url.endsWith("/")) {
         url = url.slice(0, -1);
     }
 
+    // Ensure /api/v1 suffix
     if (!url.endsWith("/api/v1")) {
         url = `${url}/api/v1`;
     }
