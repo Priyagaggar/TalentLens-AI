@@ -36,6 +36,10 @@
 
 ## 🖼️ Demo
 
+[![Live Demo](https://img.shields.io/badge/demo-live-green.svg?style=for-the-badge&logo=vercel)](https://talentlens-frontend-t7go.onrender.com)
+
+**[Try the Live App Here](https://talentlens-frontend-t7go.onrender.com)**
+
 
 
 
