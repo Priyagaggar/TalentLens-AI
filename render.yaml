@@ -22,7 +22,6 @@ services:
 
   - type: web
     name: talentlens-frontend
-    plan: free
     env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
