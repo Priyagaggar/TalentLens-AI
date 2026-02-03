@@ -20,9 +20,10 @@ services:
       - key: OPENAI_API_KEY
         sync: false # User must provide this in dashboard
 
-  - type: pstatic
+  - type: web
     name: talentlens-frontend
     plan: free
+    env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
