@@ -56,10 +56,9 @@ The system follows a modern client-server architecture:
 2.  **API Gateway (FastAPI)**: Manages endpoints, validation, and orchestrates the pipeline.
 3.  **Processing Engine**:
     *   **Extractors**: Parsers for PDF/DOCX.
-    *   **Matching & Ranking Engine**:
-      - TF-IDF (Scikit-Learn) + Cosine Similarity for resume-JD matching.
-      - FuzzyWuzzy for approximate skill matching.
-      - SentenceTransformer embeddings for semantic similarity analysis.
+    *   **Matching & Ranking Engine**: TF-IDF (Scikit-Learn) + Cosine Similarity for resume-JD matching.
+                                       FuzzyWuzzy for approximate skill matching.
+                                       SentenceTransformer embeddings for semantic similarity analysis.
 4.  **Database (PostgreSQL)**: Stores metadata, parsed text, and ranking results.
 
 ### Data Flow
