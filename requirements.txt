@@ -19,6 +19,7 @@ aiosqlite
 psycopg2-binary
 asyncpg
 torch==2.2.1+cpu
+transformers<5.0.0
 sentence-transformers>=2.3.1
 
 passlib
