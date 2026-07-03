@@ -18,7 +18,7 @@ httpx
 aiosqlite
 psycopg2-binary
 asyncpg
-torch==2.2.1+cpu
+torch==2.5.1+cpu
 transformers<5.0.0
 sentence-transformers>=2.3.1
 
