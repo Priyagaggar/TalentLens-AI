@@ -17,14 +17,14 @@ class Ranker:
         """
         if weights is None:
             self.weights = {
-                "tfidf": 0.4,
+                "bert": 0.4,
                 "skills": 0.4,
                 "experience": 0.2
             }
         else:
             self.weights = weights
 
-    def rank_candidates(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def rank_candidates(self, candidates: List[Dict[str, Any]], required_experience: float = 0.0) -> List[Dict[str, Any]]:
         """
         Ranks a list of candidates based on their aggregated scores.
         
@@ -43,29 +43,32 @@ class Ranker:
         for candidate in candidates:
             # 1. Normalize Scores to 0-100 scale
             
-            # TF-IDF: 0.65 -> 65.0
-            norm_tfidf = candidate.get("tfidf_score", 0.0) * 100.0
+            # BERT: 0.65 -> 65.0
+            norm_bert = candidate.get("bert_score", 0.0) * 100.0
             
             # Skills: Already 0-100
             norm_skills = candidate.get("skill_match_percentage", 0.0)
             
-            # Experience: Cap at 10 years -> 100 points. (Linear scaling)
-            # 5 years -> 50 points.
+            # Experience: Scale relative to requirement
             exp_years = candidate.get("years_of_experience", 0.0)
-            norm_exp = min(exp_years, 10.0) * 10.0
+            if required_experience <= 0.0:
+                # If no experience required, everyone gets 100 points for this chunk
+                norm_exp = 100.0
+            else:
+                # Cap at required_experience, scale to 100
+                norm_exp = min(exp_years, required_experience) / required_experience * 100.0
             
             # 2. Calculate Weighted Final Score
             final_score = (
-                (norm_tfidf * self.weights["tfidf"]) +
+                (norm_bert * self.weights["bert"]) +
                 (norm_skills * self.weights["skills"]) +
                 (norm_exp * self.weights["experience"])
             )
             
-            # 3. Create Explanation
+            # 3. Create Explanation (Human Readable)
             explanation = (
-                f"TF-IDF ({int(norm_tfidf)} * {self.weights['tfidf']}) + "
-                f"Skills ({int(norm_skills)} * {self.weights['skills']}) + "
-                f"Exp ({int(norm_exp)} * {self.weights['experience']})"
+                f"Matches {int(norm_skills)}% of required skills and {int(norm_bert)}% of the semantic context, "
+                f"with an experience score of {int(norm_exp)}%."
             )
             
             # Create enriched candidate object
@@ -73,7 +76,7 @@ class Ranker:
             ranked_candidate = candidate.copy()
             ranked_candidate.update({
                 "normalized_scores": {
-                    "tfidf": round(norm_tfidf, 1),
+                    "bert": round(norm_bert, 1),
                     "skills": round(norm_skills, 1),
                     "experience": round(norm_exp, 1)
                 },

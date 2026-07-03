@@ -40,20 +40,30 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
-const ResumeUploader = () => {
+const ResumeUploader = ({ token }) => {
     const [resumes, setResumes] = useState([]);
     const [jdText, setJdText] = useState("");
+    const [jdFile, setJdFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [results, setResults] = useState(null);
     const [error, setError] = useState(null);
 
     const fileInputRef = useRef(null);
+    const jdFileInputRef = useRef(null);
+
+    const handleJdFileChange = (e) => {
+        if (e.target.files && e.target.files[0]) {
+            setJdFile(e.target.files[0]);
+            setJdText(""); // clear text if file uploaded
+            setError(null);
+        }
+    };
 
     const handleFileChange = (e) => {
         if (e.target.files) {
             const newFiles = Array.from(e.target.files).filter(file =>
-                ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type)
+                ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'].includes(file.type)
             );
             // Limit to 10 files max for now to prevent overload
             if (resumes.length + newFiles.length > 10) {
@@ -74,8 +84,8 @@ const ResumeUploader = () => {
             setError("Please upload at least one resume.");
             return;
         }
-        if (!jdText.trim()) {
-            setError("Please enter a Job Description.");
+        if (!jdText.trim() && !jdFile) {
+            setError("Please enter a Job Description text or upload a file.");
             return;
         }
 
@@ -84,28 +94,38 @@ const ResumeUploader = () => {
         setResults(null);
 
         try {
-            // 1. Upload Resumes & JD (as text)
+            // 1. Upload Resumes & JD
             const formData = new FormData();
             resumes.forEach(file => {
                 formData.append('resumes', file);
             });
-            formData.append('job_description_text', jdText);
+            if (jdText.trim()) {
+                formData.append('job_description_text', jdText);
+            } else if (jdFile) {
+                formData.append('job_description_file', jdFile);
+            }
 
-            const uploadRes = await axios.post(`${API_BASE_URL}/upload/resumes`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+            const uploadRes = await axios.post(`${getApiBaseUrl()}/upload/resumes`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                    'Authorization': `Bearer ${token}`
+                }
             });
 
-            const { job_description_id, resume_ids } = uploadRes.data;
             setIsUploading(false);
             setIsAnalyzing(true);
 
             // 2. Trigger Batch Analysis
-            const analysisRes = await axios.post(`${API_BASE_URL}/analyze/batch`, {
-                job_description_id,
-                resume_ids
+            const analyzeReq = {
+                resume_ids: uploadRes.data.resume_ids,
+                job_description_id: uploadRes.data.job_description_id
+            };
+            
+            const analyzeRes = await axios.post(`${getApiBaseUrl()}/analyze/batch`, analyzeReq, {
+                headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            setResults(analysisRes.data);
+            setResults(analyzeRes.data);
 
         } catch (err) {
             console.error(err);
@@ -125,7 +145,7 @@ const ResumeUploader = () => {
                     <span className="bg-gradient-to-r from-primary-700 to-indigo-700 bg-clip-text text-transparent">AI-Powered Recruiting Assistant</span>
                 </div>
                 <h1 className="text-4xl md:text-6xl font-display font-bold tracking-tight text-slate-900 leading-[1.1]">
-                    Screen candidates <br className="hidden md:block" /> with <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">superhuman speed</span>.
+                    Screen candidates <br className="hidden md:block" /> with <span className="bg-gradient-to-r from-primary-600 to-indigo-600 bg-clip-text text-transparent">superhuman speed</span>
                 </h1>
                 <p className="text-lg md:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto">
                     Upload resumes and a job description. Let our AI rank candidates, extract skills, and provide intelligent match scores in seconds.
@@ -149,12 +169,30 @@ const ResumeUploader = () => {
                                 </h2>
                                 <span className="text-[10px] font-bold px-2 py-1 rounded bg-slate-100 text-slate-500 uppercase tracking-wider border border-slate-200">Required</span>
                             </div>
-                            <textarea
-                                className="w-full h-72 p-4 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all resize-none text-sm leading-relaxed placeholder:text-slate-400 font-medium text-slate-700 custom-scrollbar"
-                                placeholder="Paste the full job requirements, responsibilities, and qualifications here..."
-                                value={jdText}
-                                onChange={(e) => setJdText(e.target.value)}
-                            />
+                            
+                            {jdFile ? (
+                                <div className="flex flex-col items-center justify-center h-72 border-2 border-dashed border-indigo-200 bg-indigo-50/50 rounded-xl">
+                                    <FileText className="w-12 h-12 text-indigo-400 mb-2" />
+                                    <p className="font-bold text-slate-700 text-center max-w-[80%] truncate">{jdFile.name}</p>
+                                    <p className="text-xs text-slate-500 mb-4">{formatBytes(jdFile.size)}</p>
+                                    <button onClick={() => setJdFile(null)} className="text-sm font-semibold text-rose-500 hover:text-rose-600">Remove File</button>
+                                </div>
+                            ) : (
+                                <div className="relative">
+                                    <textarea
+                                        className="w-full h-72 p-4 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all resize-none text-sm leading-relaxed placeholder:text-slate-400 font-medium text-slate-700 custom-scrollbar"
+                                        placeholder="Paste the full job requirements, responsibilities, and qualifications here..."
+                                        value={jdText}
+                                        onChange={(e) => setJdText(e.target.value)}
+                                    />
+                                    <div className="absolute bottom-4 right-4">
+                                        <input type="file" className="hidden" ref={jdFileInputRef} accept=".pdf,.docx,.txt" onChange={handleJdFileChange} />
+                                        <button onClick={() => jdFileInputRef.current?.click()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-sm text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:border-indigo-300 transition-all">
+                                            <Upload className="w-3.5 h-3.5" /> Upload PDF/DOCX
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -180,7 +218,7 @@ const ResumeUploader = () => {
                                     multiple
                                     className="hidden"
                                     ref={fileInputRef}
-                                    accept=".pdf,.docx"
+                                    accept=".pdf,.docx,.txt"
                                     onChange={handleFileChange}
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-tr from-primary-50/0 via-primary-50/0 to-primary-100/30 opacity-0 group-hover:opacity-100 transition-opacity -z-10" />
@@ -192,7 +230,7 @@ const ResumeUploader = () => {
                                     <p className="text-base font-bold text-slate-900">
                                         Drop resumes here or <span className="text-primary-600 hover:underline">browse</span>
                                     </p>
-                                    <p className="text-xs text-slate-500 mt-2 font-medium">PD & DOCX up to 5MB</p>
+                                    <p className="text-xs text-slate-500 mt-2 font-medium">PDF, DOCX & TXT up to 5MB</p>
                                 </div>
                             </div>
                         </div>
@@ -228,7 +266,7 @@ const ResumeUploader = () => {
                                     <div key={idx} className="group relative flex items-center justify-between p-4 bg-white border border-slate-100 rounded-xl shadow-sm hover:shadow-md hover:border-primary-200 hover:translate-x-1 transition-all">
                                         <div className="flex items-center gap-4 overflow-hidden">
                                             <div className="w-10 h-10 rounded-lg bg-slate-50 flex items-center justify-center flex-shrink-0 border border-slate-100 text-slate-500 group-hover:bg-primary-50 group-hover:text-primary-600 transition-colors font-bold text-xs">
-                                                PDF
+                                                {file.name.split('.').pop().toUpperCase()}
                                             </div>
                                             <div className="flex flex-col min-w-0">
                                                 <span className="truncate font-semibold text-sm text-slate-800">{file.name}</span>
@@ -284,7 +322,7 @@ const ResumeUploader = () => {
             {/* Results Section */}
             {results && (
                 <div id="results-section" className="space-y-6 pt-12 border-t border-slate-200 animate-slide-up">
-                    <ResultsDashboard results={results} />
+                    <ResultsDashboard results={results} token={token} />
                 </div>
             )}
         </div>

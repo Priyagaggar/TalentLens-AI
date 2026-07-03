@@ -5,10 +5,19 @@ from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
 
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, index=True) # UUID
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 class JobDescription(Base):
     __tablename__ = "job_descriptions"
 
     id = Column(String, primary_key=True, index=True) # UUID
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -16,6 +25,7 @@ class Resume(Base):
     __tablename__ = "resumes"
 
     id = Column(String, primary_key=True, index=True) # UUID
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
     filename = Column(String, nullable=False)
     file_path = Column(String, nullable=True) # Local path if saved
     extracted_text = Column(Text, nullable=True)

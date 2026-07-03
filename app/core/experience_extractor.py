@@ -125,6 +125,33 @@ def extract_experience_from_dates(text: str) -> float:
 
     return total_months / 12.0
 
+def extract_required_experience_from_jd(text: str) -> float:
+    """
+    Extracts the explicitly required years of experience from a Job Description.
+    Returns 0.0 if fresher/entry-level is mentioned, or if no explicit requirement is found.
+    """
+    # Check for explicit fresher/entry level
+    fresher_patterns = [
+        r'\b(fresher|entry[- ]level|0 years?)\b'
+    ]
+    for pattern in fresher_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return 0.0
+            
+    # Check for "X+ years", "X-Y years", "minimum X years"
+    req_patterns = [
+        r'(?:require[ds]?|minimum|min|at least)\s*(?:of\s*)?(\d+(?:\.\d+)?)\+?\s*years?',
+        r'(\d+(?:\.\d+)?)\+?\s*years?(?:\s*of)?\s*(?:experience|exp)',
+        r'(\d+(?:\.\d+)?)\s*(?:to|-)\s*\d+\s*years?'
+    ]
+    
+    for pattern in req_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+            
+    return 0.0  # Default to 0 if not explicitly mentioned
+
 if __name__ == "__main__":
     # Test cases
     test_resume1 = """

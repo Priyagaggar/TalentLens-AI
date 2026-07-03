@@ -14,18 +14,23 @@ class AdvancedMatcher:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(AdvancedMatcher, cls).__new__(cls)
+        return cls._instance
+
+    @property
+    def model(self):
+        if self.__class__._model is None:
             logger.info("Loading BERT model (all-MiniLM-L6-v2)... This may take a moment.")
             start = time.time()
-            cls._model = SentenceTransformer('all-MiniLM-L6-v2')
+            self.__class__._model = SentenceTransformer('all-MiniLM-L6-v2')
             logger.info(f"BERT model loaded in {time.time() - start:.2f}s")
-        return cls._instance
+        return self.__class__._model
 
     def calculate_similarity(self, text1: str, text2: str) -> float:
         """
         Calculates semantic similarity between two texts using BERT embeddings.
         Returns float between 0.0 and 1.0.
         """
-        embeddings = self._model.encode([text1, text2], convert_to_tensor=True)
+        embeddings = self.model.encode([text1, text2], convert_to_tensor=True)
         # util.cos_sim returns a tensor, we assume 1st vs 2nd
         score = util.cos_sim(embeddings[0], embeddings[1])
         return float(score[0][0])
@@ -39,10 +44,10 @@ class AdvancedMatcher:
             return []
             
         # Encode JD once
-        jd_embedding = self._model.encode(job_description, convert_to_tensor=True)
+        jd_embedding = self.model.encode(job_description, convert_to_tensor=True)
         
         # Encode Resumes in batch
-        resume_embeddings = self._model.encode(resumes, convert_to_tensor=True)
+        resume_embeddings = self.model.encode(resumes, convert_to_tensor=True)
         
         # Calculate cosine similarity against all
         scores = util.cos_sim(jd_embedding, resume_embeddings)[0]

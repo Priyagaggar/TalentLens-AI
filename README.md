@@ -1,49 +1,39 @@
-
 # TalentLens AI 🚀
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.11-blue.svg)
+![Python](https://img.shields.io/badge/python-3.10-blue.svg)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)
 ![React](https://img.shields.io/badge/React-18-61dafb.svg)
 ![Docker](https://img.shields.io/badge/Docker-Ready-2496ed.svg)
 
-> **An intelligent, automated resume screening system that uses NLP and Machine Learning to rank candidates against job descriptions with human-readable explanations.**
+> **An intelligent, automated resume screening system that uses NLP and Machine Learning to rank candidates against job descriptions, manage history, and automate recruiter outreach with styled email templates.**
 
 ---
 
 ## 🌟 Key Features
 
-*   **📄 Universal Parsing**: Robustly extracts text from **PDF** and **DOCX** files, handling complex layouts and tables.
+*   **📄 Universal Parsing**: Robustly extracts text from **PDF**, **DOCX**, and **TXT** files, parsing candidate info in-memory.
 *   **🧠 Advanced NLP Pipeline**:
-    *   **Entity Extraction**: Automatically identifies emails and phone numbers.
-    *   **Skill Extraction**: Uses fuzzy matching against a database of 100+ technical skills.
-    *   **Experience Calculation**: Smartly parses date ranges to compute total years of experience.
+    *   **Entity Extraction**: Identifies emails, phone numbers, and names.
+    *   **Skill Extraction**: Employs fuzzy keyword matching against a predefined skills taxonomy.
+    *   **Experience Calculation**: Computes total years of experience using date regex patterns.
 *   **🎯 Intelligent Ranking**:
-    *   **TF-IDF Vectorization**: Measures semantic similarity between resumes and job descriptions.
-    *   **Weighted Scoring**: Custom algorithm combining Content Match (40%), Skill Match (40%), and Experience (20%).
-    *   **Explainable AI**: Generates human-readable feedback explaining *why* a candidate was ranked high or low.
-*   **📊 Insightful Dashboard**:
-    *   Modern **React** frontend with drag-and-drop uploads.
-    *   Visual candidate cards with score breakdowns.
-    *   Dynamic filtering by Score, Experience, and Skills.
-    *   CSV Export for easy integration with HR tools.
-*   **⚙️ Production Ready**:
-    *   **Dockerized** for easy deployment.
-    *   **Async** processing for high performance.
-    *   **PostgreSQL** integration for data persistence.
-
----
-
-## 🖼️ Demo
-
-[![Live Demo](https://img.shields.io/badge/demo-live-green.svg?style=for-the-badge&logo=vercel)](https://talentlens-frontend-t7go.onrender.com)
-
-**[Try the Live App Here](https://talentlens-frontend-t7go.onrender.com)**
-
-
-
-
-
+    *   **Semantic Matching**: Uses SentenceTransformer BERT embeddings (`all-MiniLM-L6-v2`) to measure textual similarity between resumes and JDs.
+    *   **Weighted Scoring**: Custom composite index combining Content Match (40%), Skill Match (40%), and Experience (20%).
+    *   **Explainable AI**: Returns structured feedback explaining candidate matches.
+*   **🔐 Auth & Multi-Tenancy**:
+    *   **JWT Security**: Register and login securely using encrypted passwords (`bcrypt`).
+    *   **Recruiter Isolation**: Multi-tenant database architecture. Recruiters can only access, delete, and email candidates from screenings they own.
+*   **📧 Automated Email Workflows**:
+    *   **Three-Tier Routing**: Tailors communication dynamically based on candidate score. Top matches get an **Interview Invitation** (with CTA booking links), middling candidates get a **Keep-in-Touch holding notice**, and low scorers get a **Polite Rejection**.
+    *   **Dynamic Thresholds**: Select candidates and adjust Invite/Rejection scores using sliding controllers on the UI before sending.
+    *   **Error-Tolerant Batching**: Performs batch sends with a try-except layer, returning a detailed success/failure report instead of failing the batch.
+    *   **Developer Sandbox**: Integrates with **Mailtrap** SMTP for testing, with a local **HTML Mock Logger** (`mock_emails.html`) to visually preview templates locally behind corporate firewalls.
+*   **📊 History & Management**:
+    *   Dynamic history dashboard with auto-conversion to user's local timezone.
+    *   Clean job title parser that strips markdown tags to keep the history list neat.
+    *   Screening deletion (cascades database records to clean up unused resumes/results).
+    *   Modal triggers to inspect original Job Description and Resume texts directly.
 
 ---
 
@@ -52,24 +42,12 @@
 ### System Diagram
 The system follows a modern client-server architecture:
 
-1.  **Frontend (React/Vite)**: Handles file uploads and renders the results dashboard.
-2.  **API Gateway (FastAPI)**: Manages endpoints, validation, and orchestrates the pipeline.
+1.  **Frontend (React/Vite)**: Renders the drag-and-drop uploader, history lists, email configuration modals, and results cards.
+2.  **API Gateway (FastAPI)**: Manages authentication, endpoint routing, schemas validation, and SMTP dispatches.
 3.  **Processing Engine**:
-    *   **Extractors**: Parsers for PDF/DOCX.
-    *   **Matching & Ranking Engine**: TF-IDF (Scikit-Learn) + Cosine Similarity for resume-JD matching.
-                                       FuzzyWuzzy for approximate skill matching.
-                                       SentenceTransformer embeddings for semantic similarity analysis.
-4.  **Database (PostgreSQL)**: Stores metadata, parsed text, and ranking results.
-
-### Data Flow
-1.  **Upload**: User uploads Resumes + JD via Frontend.
-2.  **Ingest**: Backend saves files securely with UUIDs.
-3.  **Parse**: Extractors convert binary files to clean text.
-4.  **Analyze**: Text is tokenized; Skills and Experience are extracted.
-5.  **Score**: Resumes are compared to the JD using vector similarity and set operations.
-6.  **Rank**: Candidates are sorted by final weighted score.
-7.  **Persist**: Results are saved to DB.
-8.  **Present**: JSON response drives the Frontend Dashboard.
+    *   **Extractors**: Parsers for PDF, DOCX, and TXT.
+    *   **Advanced Scorer**: SentenceTransformer lazy-loader that batches and calculates cosine similarities.
+4.  **Database (SQLite/PostgreSQL)**: Persists registered users, job descriptions, resumes, and evaluation results.
 
 ---
 
@@ -78,147 +56,88 @@ The system follows a modern client-server architecture:
 ### Prerequisites
 *   Python 3.10+
 *   Node.js 16+
-*   Docker & Docker Compose (optional but recommended)
-
-### Option A: Docker (Recommended)
-The easiest way to run the full stack (Backend + DB).
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/yourusername/ai-resume-screener.git
-cd ai-resume-screener
-
-# 2. Build and Run
-docker-compose up --build
-```
-
-Access the dashboard at `http://localhost:5173` (if frontend containerized) or API at `http://localhost:8000/docs`.
-
-### Option B: Manual Setup
-
-#### Backend
-```bash
-cd ai_resume_screener
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Download NLP models
-python -m spacy download en_core_web_sm
-
-# Init Database (SQLite default for local)
-python scripts/init_db.py
-
-# Run Server
-uvicorn app.main:app --reload
-```
-
-#### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+*   Docker & Docker Compose (optional)
 
 ### Environment Variables
-Create a `.env` file (managed by `app/config.py`):
+Create a `.env` file in the root folder of your project:
 ```ini
 PROJECT_NAME="TalentLens AI"
-BACKEND_CORS_ORIGINS=["http://localhost:5173"]
-DATABASE_URL="sqlite+aiosqlite:///./resume_screener.db" # or postgresql://...
+DATABASE_URL="sqlite+aiosqlite:///./sql_app.db"
+
+# JWT Auth Settings
+SECRET_KEY="your-secret-key-change-in-prod"
+ALGORITHM="HS256"
+
+# Email SMTP Settings (Mailtrap sandbox example)
+SMTP_HOST="sandbox.smtp.mailtrap.io"
+SMTP_PORT=2525
+SMTP_USER="your_mailtrap_smtp_user"
+SMTP_PASSWORD="your_mailtrap_smtp_password"
+SENDER_EMAIL="noreply@talentlens.ai"
+
+# Developer Mock Mode (Bypasses network blocks/firewalls and outputs mock HTML logs)
+MOCK_EMAIL=true
 ```
 
----
-
-## 📡 Usage
-
-### API Endpoints
-
-#### 1. Batch Analyze (Core Workflow)
-Performs full extraction, matching, and ranking.
-
+### Installation
+The project includes a launcher script (`run.bat`) for Windows users to spin up both servers concurrently.
 ```bash
-curl -X POST "http://localhost:8000/api/v1/analyze/batch" \
-  -H "accept: application/json" \
-  -H "Content-Type: multipart/form-data" \
-  -F "job_description_file=@jd.txt" \
-  -F "resume_files=@candidate1.pdf" \
-  -F "resume_files=@candidate2.docx"
-```
+# 1. Install Python dependencies
+pip install -r requirements.txt
 
-**Response Sample:**
-```json
-{
-  "job_description": "Senior Python Developer...",
-  "ranked_candidates": [
-    {
-      "rank": 1,
-      "name": "Alice Smith",
-      "final_score": 92.5,
-      "skill_match_percentage": 85,
-      "experience_years": 5,
-      "matched_skills": ["Python", "FastAPI", "Docker"],
-      "missing_skills": ["Kubernetes"],
-      "explanation": "Strong candidate with 85% skill match..."
-    }
-  ]
-}
+# 2. Install React frontend dependencies
+cd frontend
+npm install
+cd ..
+
+# 3. Start the application
+.\run.bat
 ```
+- Access the **Frontend** at `http://localhost:5173`
+- Access the **API documentation** at `http://localhost:8000/docs`
 
 ---
 
-## 📂 Project Structure
+## 📡 Core API Endpoints
+
+### 1. Authentication
+*   `POST /api/v1/auth/register`: Create a new recruiter account.
+*   `POST /api/v1/auth/login`: Exchange credentials for a JWT bearer token.
+
+### 2. Screening
+*   `POST /api/v1/upload/resumes`: Upload files and get temporary storage UUIDs.
+*   `POST /api/v1/analyze/batch`: Run NLP extraction, BERT cosine comparisons, and save results.
+
+### 3. History & Communications
+*   `GET /api/v1/history/jobs`: Retrieve list of past job screenings.
+*   `GET /api/v1/history/jobs/{job_id}/results`: Retrieve candidate rankings, job description content, and resume texts.
+*   `DELETE /api/v1/history/jobs/{job_id}`: Delete a past job screening and all its records.
+*   `POST /api/v1/history/jobs/{job_id}/email`: Trigger batch emails to selected candidates with HTML templates.
+
+---
+
+## 🛠️ Project Structure
 
 ```
-ai_resume_screener/
+TalentLens-AI/
 ├── app/
-│   ├── api/            # Route handlers (endpoints)
-│   ├── core/           # Core Logic (NLP, Extraction, Scoring)
-│   │   ├── pdf_extractor.py
-│   │   ├── resume_matcher.py
-│   │   ├── skill_extractor.py
+│   ├── api/            # Router endpoints (auth, screenings)
+│   ├── core/           # Text processing, BERT scoring, SMTP mailer
+│   │   ├── advanced_matcher.py
+│   │   ├── email_service.py
 │   │   └── ...
-│   ├── db/             # Database Models & Session
-│   └── schemas.py      # Pydantic Data Models
+│   ├── db/             # SQLAlchemy schemas & CRUD operations
+│   └── schemas.py      # Pydantic models
 ├── frontend/           # React Application
 │   ├── src/
-│   │   ├── components/ # UI Components (Uploader, Dashboard)
+│   │   ├── components/ # ResultsDashboard, HistoryList, Auth views
 │   │   └── ...
-├── tests/              # Pytest Suite
-├── data/               # Skill databases & fixtures
-├── docker-compose.yml
-├── Dockerfile
-└── requirements.txt
+├── tests/              # Test suite (pytest)
+├── requirements.txt    # Python requirements
+└── run.bat             # Batch launcher script
 ```
-
----
-
-## 💡 Technical Highlights
-
-### 🧠 NLP & Machine Learning
-*   **TF-IDF (Term Frequency-Inverse Document Frequency)**: Used to convert text into numerical vectors. This allows us to measure cosine similarity between the Job Description and Resume content effectively, capturing context beyond simple keyword matching.
-*   **Named Entity Recognition (NER)**: SpaCy is utilized for robust tokenization and identifying custom entities.
-*   **Fuzzy Matching**: `fuzzywuzzy` ensures that "React.js" and "ReactJS" are treated as the same skill, improving accuracy significantly.
-
-### 🛡️ Design Decisions
-*   **FastAPI**: Chosen for its high performance (Starlette), native Async support (essential for I/O heavy parsing), and automatic OpenAPI documentation.
-*   **React + Tailwind**: Ensures a lightweight, responsive, and highly customizable frontend without the bloat of heavy component libraries.
-*   **Strategy Pattern**: Extractors (`pdf_extractor`, `docx_extractor`) are designed to be modular. Adding support for `.txt` or `.md` files would require minimal changes.
-
----
-
-## 🔮 Future Enhancements
-
-*   [ ] **LLM Integration**: Use OpenAI/Gemini for deeper qualitative analysis and summary generation.
-*   [ ] **User Accounts**: Multi-tenancy for different recruiters.
-*   [ ] **Email Integration**: Auto-email top candidates directly from the dashboard.
-*   [ ] **OCR Support**: Processing scanned image-based PDFs.
 
 ---
 
 ## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.

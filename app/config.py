@@ -10,8 +10,18 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./sql_app.db" # Default to SQLite for easy start
     
-    # NLP
-    # Add any specific NLP model paths or keys here
+    # Auth & Security
+    SECRET_KEY: str = "your-super-secret-key-for-jwt-change-in-prod"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 # 1 day
+
+    # SMTP Settings (configured for Mailtrap defaults)
+    SMTP_HOST: str = "sandbox.smtp.mailtrap.io"
+    SMTP_PORT: int = 2525
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SENDER_EMAIL: str = "alerts@talentlens.ai"
+    MOCK_EMAIL: bool = False
 
     class Config:
         env_file = ".env"

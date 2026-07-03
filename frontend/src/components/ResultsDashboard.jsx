@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import axios from 'axios';
 import {
     Trophy,
     Download,
@@ -10,7 +11,11 @@ import {
     AlertCircle,
     Briefcase,
     Code,
-    Sparkles
+    Sparkles,
+    FileText,
+    Mail,
+    Send,
+    Loader2
 } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -27,13 +32,112 @@ const getScoreBadge = (score) => {
     return "bg-amber-100 text-amber-800 border-amber-200";
 };
 
-const ResultsDashboard = ({ results }) => {
+const Modal = ({ title, isOpen, onClose, children }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <h2 className="text-xl font-bold text-slate-800">{title}</h2>
+                    <button 
+                        onClick={onClose}
+                        className="text-slate-400 hover:text-slate-600 font-semibold p-2 hover:bg-slate-50 rounded-full transition-all"
+                    >
+                        ✕
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto flex-1 text-slate-600 text-sm leading-relaxed whitespace-pre-wrap font-sans bg-slate-50">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const getApiBaseUrl = () => {
+    let url = import.meta.env.VITE_API_URL;
+    if (!url) return "/api/v1";
+    if (!url.startsWith("http") && !url.startsWith("/")) url = `https://${url}`;
+    try {
+        const urlObj = new URL(url);
+        if (urlObj.hostname !== "localhost" && !urlObj.hostname.includes(".")) {
+            url = url.replace(urlObj.hostname, `${urlObj.hostname}.onrender.com`);
+        }
+    } catch (e) {}
+    if (url.endsWith("/")) url = url.slice(0, -1);
+    if (!url.endsWith("/api/v1")) url = `${url}/api/v1`;
+    return url;
+};
+
+const ResultsDashboard = ({ results, token }) => {
     const [minScore, setMinScore] = useState(0);
     const [minExp, setMinExp] = useState(0);
     const [skillFilter, setSkillFilter] = useState('');
     const [expandedId, setExpandedId] = useState(null);
+    const [viewingJd, setViewingJd] = useState(null);
+    const [viewingResume, setViewingResume] = useState(null);
+
+    // Email dispatch state
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+    const [interviewThreshold, setInterviewThreshold] = useState(80);
+    const [rejectionThreshold, setRejectionThreshold] = useState(50);
+    const [sendingEmails, setSendingEmails] = useState(false);
+    const [emailReport, setEmailReport] = useState(null);
 
     const candidates = results?.ranked_candidates || [];
+
+    // Automatically select all candidates on load
+    useEffect(() => {
+        if (candidates.length > 0) {
+            setSelectedIds(candidates.map(c => c.resume_id));
+        }
+    }, [candidates]);
+
+    const toggleSelectCandidate = (resumeId) => {
+        setSelectedIds(prev => 
+            prev.includes(resumeId) 
+                ? prev.filter(id => id !== resumeId) 
+                : [...prev, resumeId]
+        );
+    };
+
+    const handleToggleSelectAll = () => {
+        const visibleIds = filteredCandidates.map(c => c.resume_id);
+        const allVisibleSelected = visibleIds.every(id => selectedIds.includes(id));
+        
+        if (allVisibleSelected) {
+            setSelectedIds(prev => prev.filter(id => !visibleIds.includes(id)));
+        } else {
+            setSelectedIds(prev => [...new Set([...prev, ...visibleIds])]);
+        }
+    };
+
+    const handleSendEmails = async () => {
+        if (selectedIds.length === 0) return;
+        setSendingEmails(true);
+        setEmailReport(null);
+        try {
+            const jobId = results?.job_description_id;
+            if (!jobId) {
+                alert("Job Description ID not found in results. Cannot send emails.");
+                return;
+            }
+            const res = await axios.post(`${getApiBaseUrl()}/history/jobs/${jobId}/email`, {
+                interview_threshold: Number(interviewThreshold),
+                rejection_threshold: Number(rejectionThreshold),
+                candidate_ids: selectedIds
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setEmailReport(res.data);
+        } catch (err) {
+            console.error(err);
+            alert(err.response?.data?.detail || "Failed to dispatch batch emails.");
+        } finally {
+            setSendingEmails(false);
+        }
+    };
 
     // Filter Logic
     const filteredCandidates = useMemo(() => {
@@ -131,7 +235,22 @@ const ResultsDashboard = ({ results }) => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-end justify-end">
+                    <div className="flex items-center gap-3">
+                        {results?.job_description_content && (
+                            <button
+                                onClick={() => setViewingJd(results.job_description_content)}
+                                className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl transition-all shadow-sm text-sm font-bold tracking-wide"
+                            >
+                                <FileText className="w-4 h-4 text-slate-400" /> View Job Description
+                            </button>
+                        )}
+                        <button
+                            onClick={() => { setIsEmailModalOpen(true); setEmailReport(null); }}
+                            disabled={selectedIds.length === 0}
+                            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all shadow-lg shadow-indigo-600/20 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-bold tracking-wide"
+                        >
+                            <Mail className="w-4 h-4" /> Email Candidates ({selectedIds.length})
+                        </button>
                         <button
                             onClick={handleExport}
                             className="flex items-center gap-2 px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl transition-all shadow-lg shadow-slate-900/20 hover:shadow-slate-900/30 hover:-translate-y-0.5 active:translate-y-0 text-sm font-bold tracking-wide"
@@ -145,7 +264,22 @@ const ResultsDashboard = ({ results }) => {
             {/* Results Grid */}
             <div className="grid gap-6">
                 <div className="flex items-center justify-between text-sm text-slate-500 px-2 font-medium">
-                    <span>Showing <span className="text-slate-900 font-bold">{filteredCandidates.length}</span> top candidates</span>
+                    <div className="flex items-center gap-3">
+                        <input 
+                            type="checkbox"
+                            checked={filteredCandidates.length > 0 && filteredCandidates.every(c => selectedIds.includes(c.resume_id))}
+                            ref={(el) => {
+                                if (el) {
+                                    const allSelected = filteredCandidates.length > 0 && filteredCandidates.every(c => selectedIds.includes(c.resume_id));
+                                    const someSelected = filteredCandidates.some(c => selectedIds.includes(c.resume_id));
+                                    el.indeterminate = someSelected && !allSelected;
+                                }
+                            }}
+                            onChange={handleToggleSelectAll}
+                            className="w-4 h-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                        />
+                        <span>Selected <span className="text-slate-900 font-bold">{filteredCandidates.filter(c => selectedIds.includes(c.resume_id)).length}</span> / {filteredCandidates.length} candidates</span>
+                    </div>
                     <span className="flex items-center gap-1 cursor-pointer hover:text-primary-600 transition-colors">
                         Sort by Rank <ChevronDown className="w-3 h-3" />
                     </span>
@@ -163,13 +297,22 @@ const ResultsDashboard = ({ results }) => {
                     >
                         {/* Rank Marker */}
                         <div className={cn(
-                            "absolute top-0 left-0 px-4 py-1.5 rounded-br-2xl text-[10px] font-extrabold uppercase tracking-widest border-r border-b transition-colors z-20",
+                            "absolute top-0 left-0 px-4 py-1.5 rounded-br-2xl text-[10px] font-extrabold uppercase tracking-widest border-r border-b transition-colors z-20 flex items-center gap-2",
                             idx === 0 ? "bg-yellow-50 text-yellow-700 border-yellow-100" :
                                 idx === 1 ? "bg-slate-100 text-slate-600 border-slate-200" :
                                     idx === 2 ? "bg-orange-50 text-orange-700 border-orange-100" :
                                         "bg-slate-50 text-slate-500 border-slate-100"
                         )}>
-                            Rank #{idx + 1}
+                            <input 
+                                type="checkbox"
+                                checked={selectedIds.includes(cand.resume_id)}
+                                onChange={(e) => {
+                                    e.stopPropagation();
+                                    toggleSelectCandidate(cand.resume_id);
+                                }}
+                                className="w-3 h-3 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                            />
+                            <span>Rank #{idx + 1}</span>
                         </div>
 
                         <div
@@ -207,6 +350,15 @@ const ResultsDashboard = ({ results }) => {
                                             <Code className="w-4 h-4 text-slate-400" />
                                             <span>{cand.skill_match_percentage}% Skills</span>
                                         </div>
+                                        {cand.resume_text && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); setViewingResume({ name: cand.name, text: cand.resume_text }); }}
+                                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-50 hover:bg-primary-100 border border-primary-100 text-primary-700 font-semibold transition-colors"
+                                            >
+                                                <FileText className="w-4 h-4 text-primary-500" />
+                                                <span>View Resume</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
 
@@ -314,6 +466,166 @@ const ResultsDashboard = ({ results }) => {
                     </div>
                 )}
             </div>
+
+            {/* Modals */}
+            <Modal 
+                title="Original Job Description" 
+                isOpen={viewingJd !== null} 
+                onClose={() => setViewingJd(null)}
+            >
+                {viewingJd}
+            </Modal>
+
+            <Modal 
+                title={`Resume: ${viewingResume?.name || ''}`}
+                isOpen={viewingResume !== null} 
+                onClose={() => setViewingResume(null)}
+            >
+                {viewingResume?.text}
+            </Modal>
+
+            {/* Email Dispatch Modal */}
+            <Modal
+                title={`Email Selected Candidates (${selectedIds.length})`}
+                isOpen={isEmailModalOpen}
+                onClose={() => { if (!sendingEmails) setIsEmailModalOpen(false); }}
+            >
+                {!emailReport ? (
+                    <div className="space-y-6">
+                        <p className="text-slate-500 text-sm">
+                            Configure thresholds to tailor the automated email templates. Candidates will receive styled HTML notifications based on their score.
+                        </p>
+
+                        <div className="grid md:grid-cols-2 gap-8">
+                            {/* Controls */}
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide flex justify-between">
+                                        Interview Invite Threshold <span className="text-indigo-600 font-bold">{interviewThreshold}%</span>
+                                    </label>
+                                    <input 
+                                        type="range"
+                                        min={rejectionThreshold + 1}
+                                        max="100"
+                                        value={interviewThreshold}
+                                        onChange={(e) => setInterviewThreshold(Number(e.target.value))}
+                                        className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                                    />
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide flex justify-between">
+                                        Rejection Threshold <span className="text-rose-600 font-bold">{rejectionThreshold}%</span>
+                                    </label>
+                                    <input 
+                                        type="range"
+                                        min="0"
+                                        max={interviewThreshold - 1}
+                                        value={rejectionThreshold}
+                                        onChange={(e) => setRejectionThreshold(Number(e.target.value))}
+                                        className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-rose-600"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Preview Panel */}
+                            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/60 space-y-4">
+                                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Email Dispatch Preview</h4>
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-center text-sm font-medium text-slate-600">
+                                        <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Interview Invitations:</span>
+                                        <span className="font-bold text-slate-800">
+                                            {candidates.filter(c => selectedIds.includes(c.resume_id) && c.final_score >= interviewThreshold).length}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm font-medium text-slate-600">
+                                        <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-slate-400" /> Keep in Touch/Hold:</span>
+                                        <span className="font-bold text-slate-800">
+                                            {selectedIds.length - 
+                                             candidates.filter(c => selectedIds.includes(c.resume_id) && c.final_score >= interviewThreshold).length - 
+                                             candidates.filter(c => selectedIds.includes(c.resume_id) && c.final_score < rejectionThreshold).length}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm font-medium text-slate-600">
+                                        <span className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-rose-500" /> Polite Rejections:</span>
+                                        <span className="font-bold text-slate-800">
+                                            {candidates.filter(c => selectedIds.includes(c.resume_id) && c.final_score < rejectionThreshold).length}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <button
+                                onClick={() => setIsEmailModalOpen(false)}
+                                disabled={sendingEmails}
+                                className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-bold text-sm transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSendEmails}
+                                disabled={sendingEmails}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm transition-all shadow-md shadow-indigo-600/20 disabled:opacity-75 disabled:cursor-not-allowed"
+                            >
+                                {sendingEmails ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Sending...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Send className="w-4 h-4" />
+                                        Send Emails
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    // Email Dispatch Report (Detailed summary)
+                    <div className="space-y-6">
+                        <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-emerald-800">
+                            <CheckCircle className="w-6 h-6 text-emerald-500" />
+                            <div>
+                                <h4 className="font-bold text-sm">Batch Email Dispatch Completed</h4>
+                                <p className="text-xs opacity-90">
+                                    Successfully delivered {emailReport.successful_count} emails. Failed to deliver {emailReport.failed_count} emails.
+                                </p>
+                            </div>
+                        </div>
+
+                        {emailReport.failed_count > 0 && (
+                            <div className="space-y-3">
+                                <h4 className="text-xs font-bold text-rose-600 uppercase tracking-wider flex items-center gap-2">
+                                    <AlertCircle className="w-4 h-4" /> Failed Dispatches ({emailReport.failed_count})
+                                </h4>
+                                <div className="max-h-40 overflow-y-auto border border-rose-100 rounded-xl bg-rose-50/20 divide-y divide-rose-100/50">
+                                    {emailReport.failures.map((f, i) => (
+                                        <div key={i} className="p-3 text-xs flex justify-between items-center">
+                                            <div>
+                                                <span className="font-bold text-slate-800">{f.name}</span>
+                                                <span className="text-slate-400 ml-2">({f.email})</span>
+                                            </div>
+                                            <span className="text-rose-600 font-semibold">{f.reason}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end pt-4 border-t border-slate-100">
+                            <button
+                                onClick={() => setIsEmailModalOpen(false)}
+                                className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm transition-all shadow-md"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 };

@@ -3,7 +3,7 @@ import logging
 from typing import Optional
 import os
 
-import PyPDF2
+import pypdf
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +23,7 @@ class PDFExtractionError(Exception):
 
 def extract_text_from_pdf(file_path: str) -> str:
     """
-    Extracts text from a PDF file using PyPDF2 with a fallback to pdfplumber.
+    Extracts text from a PDF file using pypdf with a fallback to pdfplumber.
 
     Args:
         file_path (str): The absolute path to the PDF file.
@@ -40,11 +40,11 @@ def extract_text_from_pdf(file_path: str) -> str:
 
     text = ""
     
-    # Method 1: PyPDF2 (Primary)
+    # Method 1: pypdf (Primary)
     try:
-        logger.info(f"Attempting to extract text from {file_path} using PyPDF2...")
+        logger.info(f"Attempting to extract text from {file_path} using pypdf...")
         with open(file_path, "rb") as f:
-            reader = PyPDF2.PdfReader(f)
+            reader = pypdf.PdfReader(f)
             for page in reader.pages:
                 extracted = page.extract_text()
                 if extracted:
@@ -52,13 +52,13 @@ def extract_text_from_pdf(file_path: str) -> str:
         
         text = text.strip()
         if text:
-            logger.info("Successfully extracted text using PyPDF2.")
+            logger.info("Successfully extracted text using pypdf.")
             return text
         else:
-            logger.warning("PyPDF2 extracted empty text. Attempting fallback...")
+            logger.warning("pypdf extracted empty text. Attempting fallback...")
 
     except Exception as e:
-        logger.error(f"PyPDF2 extraction failed: {e}")
+        logger.error(f"pypdf extraction failed: {e}")
 
     # Method 2: pdfplumber (Fallback)
     if pdfplumber:

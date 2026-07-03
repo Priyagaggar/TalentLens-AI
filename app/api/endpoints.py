@@ -4,18 +4,32 @@ import shutil
 import logging
 from typing import List
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Depends
 from fastapi.responses import JSONResponse
+from app.api.auth import get_current_user
+from app.db.models import User
 
-from app.schemas import ResumeAnalysisResponse, ErrorResponse, UploadResponse, BatchAnalysisRequest, BatchAnalysisResponse, RankedCandidate
+from app.schemas import ResumeAnalysisResponse, ErrorResponse, UploadResponse, BatchAnalysisRequest, BatchAnalysisResponse, RankedCandidate, BatchEmailRequest
 from app.core.pdf_extractor import extract_text_from_pdf
 from app.core.docx_extractor import extract_text_from_docx
 from app.core.text_processor import TextProcessor
 from app.core.skill_extractor import SkillExtractor
-from app.core.experience_extractor import extract_experience
-from app.core.resume_matcher import ResumeMatcher
+from app.core.experience_extractor import extract_experience, extract_required_experience_from_jd
+
+from app.core.advanced_matcher import AdvancedMatcher
 from app.core.skill_matcher import SkillMatcher
 from app.core.ranker import Ranker
+from app.db.database import (
+    save_job_description,
+    save_resume,
+    save_ranking_result,
+    get_all_job_descriptions,
+    get_job_description,
+    get_rankings_for_job,
+    get_resume,
+    delete_job_description,
+    update_resume_text
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,10 +64,10 @@ async def analyze_resume(
     filename = resume_file.filename
     extension = filename.split(".")[-1].lower()
     
-    if extension not in ["pdf", "docx"]:
+    if extension not in ["pdf", "docx", "txt"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file format. Only PDF and DOCX are supported."
+            detail="Invalid file format. Only PDF, DOCX, and TXT are supported."
         )
 
     # 2. Save File Temporarily
@@ -72,6 +86,9 @@ async def analyze_resume(
                 content_text = extract_text_from_pdf(temp_path)
             elif extension == "docx":
                 content_text = extract_text_from_docx(temp_path)
+            elif extension == "txt":
+                with open(temp_path, "r", encoding="utf-8") as f:
+                    content_text = f.read()
         except Exception as e:
             logger.error(f"Extraction failed: {e}")
             raise HTTPException(status_code=400, detail=f"Failed to extract text: {str(e)}")
@@ -107,22 +124,22 @@ async def analyze_resume(
         skill_matcher = SkillMatcher()
         skill_match_result = skill_matcher.match_skills(resume_flat_skills, jd_flat_skills)
         
-        # 9. Semantic Matching (TF-IDF)
-        matcher = ResumeMatcher()
-        matcher.fit(job_description)
-        tfidf_score = matcher.score_resume(content_text)
+        # 9. Semantic Matching (BERT)
+        matcher = AdvancedMatcher()
+        bert_score = matcher.batch_compare([content_text], job_description)[0]
         
         # 10. Final Scoring (Using Ranker Logic)
         # Construct a candidate object for the ranker
         candidate_data = {
             "name": filename, # Using filename as fallback for name
-            "tfidf_score": tfidf_score,
+            "bert_score": bert_score,
             "skill_match_percentage": skill_match_result["match_percentage"],
             "years_of_experience": years_exp
         }
         
         # Ranker expects a list, returns a list
-        ranked_result = ranker.rank_candidates([candidate_data])[0]
+        jd_req_exp = extract_required_experience_from_jd(job_description)
+        ranked_result = ranker.rank_candidates([candidate_data], required_experience=jd_req_exp)[0]
         
         # 11. cleanup and response
         response_data = ResumeAnalysisResponse(
@@ -131,7 +148,7 @@ async def analyze_resume(
             phones=processed_data.get("phone_numbers", []),
             years_of_experience=years_exp,
             extracted_skills=resume_skills_dict,
-            tfidf_similarity=tfidf_score,
+            tfidf_similarity=bert_score, # Keeping field name for schema compatibility
             skill_match_details=skill_match_result,
             final_score=ranked_result["final_score"],
             scoring_explanation=ranked_result.get("scoring_explanation", "")
@@ -150,10 +167,11 @@ async def analyze_resume(
 import uuid
 
 @router.post("/upload/resumes", response_model=UploadResponse)
-async def upload_resumes(
+async def upload_resumes_and_jd(
     resumes: List[UploadFile] = File(...),
     job_description_file: UploadFile = File(None),
-    job_description_text: str = Form(None)
+    job_description_text: str = Form(None),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Uploads multiple resumes and a job description.
@@ -178,6 +196,11 @@ async def upload_resumes(
         jd_path = os.path.join(UPLOAD_DIR, f"{jd_id}.txt")
         with open(jd_path, "w", encoding="utf-8") as f:
             f.write(jd_content)
+        await save_job_description({
+            "id": jd_id, 
+            "content": jd_content,
+            "user_id": current_user.id
+        })
             
     elif job_description_file:
         # Validate JD file
@@ -194,6 +217,7 @@ async def upload_resumes(
             
             with open(jd_path, "wb") as f:
                 f.write(content)
+            await save_job_description({"id": jd_id, "content": f"File: {job_description_file.filename}", "user_id": current_user.id})
         except Exception as e:
              raise HTTPException(status_code=500, detail=f"Failed to save JD: {str(e)}")
     else:
@@ -205,9 +229,9 @@ async def upload_resumes(
     for resume in resumes:
         # Validate Extension
         ext = resume.filename.split(".")[-1].lower()
-        if ext not in ["pdf", "docx"]:
+        if ext not in ["pdf", "docx", "txt"]:
             # We could skip or raise error. Raising error is safer for now.
-            raise HTTPException(status_code=400, detail=f"Invalid resume file type: {resume.filename}. Only PDF/DOCX allowed.")
+            raise HTTPException(status_code=400, detail=f"Invalid resume file type: {resume.filename}. Only PDF/DOCX/TXT allowed.")
         
         # Validate Size and Save
         res_id = str(uuid.uuid4())
@@ -222,6 +246,13 @@ async def upload_resumes(
             
             with open(save_path, "wb") as f:
                 f.write(content)
+                
+            await save_resume({
+                "id": res_id,
+                "filename": resume.filename,
+                "file_path": save_path,
+                "user_id": current_user.id
+            })
                 
             resume_ids.append(res_id)
             
@@ -238,24 +269,29 @@ import time
 import asyncio
 
 @router.post("/analyze/batch", response_model=BatchAnalysisResponse)
-async def analyze_batch(request: BatchAnalysisRequest):
+async def analyze_batch(request: BatchAnalysisRequest, current_user: User = Depends(get_current_user)):
     """
     Analyzes multiple resumes against a job description.
     Files must have been previously uploaded to get IDs.
     """
+    # 1. Fetch JD
+    jd_record = await get_job_description(request.job_description_id, current_user.id)
+    if not jd_record:
+        raise HTTPException(status_code=404, detail="Job Description not found or unauthorized.")
+        
     start_time = time.time()
     UPLOAD_DIR = "uploaded_files"
     
-    # 1. Resolve Job Description File
+    # Resolve Job Description File
     jd_id = request.job_description_id
-    jd_text = ""
-    # Look for .txt, .pdf, .docx
-    found_jd = False
-    for ext in ["txt", "pdf", "docx"]:
-        path = os.path.join(UPLOAD_DIR, f"{jd_id}.{ext}")
-        if os.path.exists(path):
-            found_jd = True
-            try:
+    jd_text = jd_record.content
+    
+    # If the record is just a reference to a file (simplified implementation)
+    if jd_text.startswith("File: "):
+        filename = jd_text.replace("File: ", "")
+        for ext in ["txt", "pdf", "docx"]:
+            path = os.path.join(UPLOAD_DIR, f"{jd_id}.{ext}")
+            if os.path.exists(path):
                 if ext == "txt":
                     with open(path, "r", encoding="utf-8") as f:
                         jd_text = f.read()
@@ -263,23 +299,15 @@ async def analyze_batch(request: BatchAnalysisRequest):
                     jd_text = extract_text_from_pdf(path)
                 elif ext == "docx":
                     jd_text = extract_text_from_docx(path)
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Failed to read JD: {str(e)}")
-            break
-            
-    if not found_jd:
-        raise HTTPException(status_code=404, detail=f"Job Description {jd_id} not found.")
+                break
 
     if not jd_text.strip():
         raise HTTPException(status_code=400, detail="Job Description text is empty.")
 
     # 2. Process Resumes Loop
     candidates_data = [] # For Ranking
-    results_map = {} # For final response construction
-    
-    # Fit matcher once
-    matcher = ResumeMatcher()
-    matcher.fit(jd_text)
+    resume_texts = []
+    resume_details = []
     
     # Get JD skills once
     jd_skills_dict = skill_extractor.extract_skills(jd_text)
@@ -287,16 +315,17 @@ async def analyze_batch(request: BatchAnalysisRequest):
     for cat_skills in jd_skills_dict.values():
         jd_flat_skills.extend(cat_skills)
 
+    # Extract Required Experience from JD
+    jd_req_exp = extract_required_experience_from_jd(jd_text)
+
     for resume_id in request.resume_ids:
-        # Find file
-        res_path = None
-        for ext in ["pdf", "docx"]:
-            path = os.path.join(UPLOAD_DIR, f"{resume_id}.{ext}")
-            if os.path.exists(path):
-                res_path = path
-                break
+        r_record = await get_resume(resume_id, current_user.id)
+        if not r_record:
+            continue
+            
+        res_path = r_record.file_path
         
-        if not res_path:
+        if not os.path.exists(res_path):
             logger.warning(f"Resume {resume_id} not found, skipping.")
             continue
             
@@ -305,14 +334,38 @@ async def analyze_batch(request: BatchAnalysisRequest):
             content_text = ""
             if res_path.endswith(".pdf"):
                 content_text = extract_text_from_pdf(res_path)
-            else:
+            elif res_path.endswith(".docx"):
                 content_text = extract_text_from_docx(res_path)
+            elif res_path.endswith(".txt"):
+                with open(res_path, "r", encoding="utf-8") as f:
+                    content_text = f.read()
                 
             if not content_text:
                 continue
 
+            # Save extracted text to DB
+            await update_resume_text(resume_id, content_text)
+
+            resume_texts.append(content_text)
+            resume_details.append({
+                "resume_id": resume_id,
+                "content_text": content_text
+            })
+            
+        except Exception as e:
+            logger.error(f"Error extracting resume {resume_id}: {e}")
+            continue
+
+    # Batch compute BERT scores
+    advanced_matcher = AdvancedMatcher()
+    bert_scores = advanced_matcher.batch_compare(resume_texts, jd_text)
+    
+    for i, details in enumerate(resume_details):
+        content_text = details["content_text"]
+        resume_id = details["resume_id"]
+        
+        try:
             # NLP Extraction
-            # We can run these in parallel? For now sequential.
             processed_data = text_processor.preprocess(content_text)
             emails = processed_data.get("emails", [])
             name = emails[0].split("@")[0] if emails else f"Candidate-{resume_id[:4]}"
@@ -326,21 +379,19 @@ async def analyze_batch(request: BatchAnalysisRequest):
             # Experience
             years_exp = extract_experience(content_text)
             
-            # Scores
-            tfidf_score = matcher.score_resume(content_text)
-            
             skill_matcher_inst = SkillMatcher()
             skill_result = skill_matcher_inst.match_skills(resume_flat_skills, jd_flat_skills)
             
             # Collect data for Ranker
             cand_obj = {
-                "resume_id": resume_id, # Extra field for mapping back
+                "resume_id": resume_id,
                 "name": name,
-                "tfidf_score": tfidf_score,
+                "bert_score": bert_scores[i],
                 "skill_match_percentage": skill_result["match_percentage"],
                 "years_of_experience": years_exp,
                 "matched_skills": skill_result["matched_skills"],
-                "missing_skills": skill_result["missing_skills"]
+                "missing_skills": skill_result["missing_skills"],
+                "resume_text": content_text
             }
             candidates_data.append(cand_obj)
             
@@ -349,7 +400,7 @@ async def analyze_batch(request: BatchAnalysisRequest):
             continue
 
     # 3. Rank
-    ranked_list = ranker.rank_candidates(candidates_data)
+    ranked_list = ranker.rank_candidates(candidates_data, required_experience=jd_req_exp)
     
     # 4. Construct Response
     final_output = []
@@ -358,28 +409,202 @@ async def analyze_batch(request: BatchAnalysisRequest):
             resume_id=ranked["resume_id"],
             name=ranked["name"],
             final_score=ranked["final_score"],
-            tfidf_score=ranked["normalized_scores"]["tfidf"], # Use normalized or raw? Request asked for raw score potentially but normalized is decent. 
-            # Re-reading request: "tfidf_score": 0.78". That's raw. 
-            # My Ranker normalizes internal but keeps input? 
-            # Wait, my Ranker rank_candidates returns enriched dict but doesn't overwrite raw inputs unless I did "ranked_candidate = candidate.copy()". Yes I did.
-            # So "tfidf_score" in 'ranked' is essentialy the input 0.78
-            # Let's check Ranker code.
-            # "tfidf_score": 0.85 (input)
-            # "normalized_scores": { "tfidf": 85.0 }
-            # So I should return the raw input key "tfidf_score".
-            # BUT Schema expects float.
-            # Let's return raw input tfidf (0-1) as it's more standard.
+            tfidf_score=ranked["normalized_scores"]["bert"], 
             skill_match_percentage=ranked["skill_match_percentage"],
             experience_years=ranked["years_of_experience"],
             matched_skills=ranked["matched_skills"],
             missing_skills=ranked["missing_skills"],
-            explanation=ranked["scoring_explanation"]
+            explanation=ranked["scoring_explanation"],
+            resume_text=ranked.get("resume_text", "")
         ))
+        
+        # Save to DB
+        await save_ranking_result({
+            "job_description_id": jd_id,
+            "resume_id": ranked["resume_id"],
+            "total_score": ranked["final_score"],
+            "details": {
+                "skill_match": ranked["skill_match_percentage"],
+                "experience": ranked["years_of_experience"],
+                "matched_skills": ranked["matched_skills"],
+                "missing_skills": ranked["missing_skills"],
+                "explanation": ranked["scoring_explanation"]
+            }
+        })
         
     processing_time = f"{round(time.time() - start_time, 2)}s"
     
     return BatchAnalysisResponse(
         ranked_candidates=final_output,
-        processing_time=processing_time
+        processing_time=processing_time,
+        job_description_content=jd_record.content,
+        job_description_id=jd_id
     )
+
+def get_clean_title(content: str) -> str:
+    lines = [line.strip() for line in content.split('\n') if line.strip()]
+    if not lines:
+        return "Untitled Job Description"
+    first_line = lines[0]
+    for char in ['#', '*', '_', '`']:
+        first_line = first_line.replace(char, '')
+    first_line = first_line.strip()
+    return first_line[:80] + "..." if len(first_line) > 80 else first_line
+
+@router.get("/history/jobs")
+async def get_jobs_history(current_user: User = Depends(get_current_user)):
+    """Returns a list of all past job runs."""
+    jobs = await get_all_job_descriptions(current_user.id)
+    result = []
+    for j in jobs:
+        result.append({
+            "id": j.id,
+            "title": get_clean_title(j.content),
+            "created_at": j.created_at.isoformat() + "Z"
+        })
+    return result
+
+@router.get("/history/jobs/{job_id}/results")
+async def get_job_results_history(job_id: str, current_user: User = Depends(get_current_user)):
+    """Returns the ranking results for a specific job."""
+    
+    # Verify user owns the job
+    job = await get_job_description(job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found.")
+        
+    rankings = await get_rankings_for_job(job_id)
+    if not rankings:
+        raise HTTPException(status_code=404, detail="No results found for this job.")
+        
+    final_output = []
+    for r in rankings:
+        resume = await get_resume(r.resume_id, current_user.id)
+        name = resume.filename if resume else f"Unknown-{r.resume_id[:4]}"
+        details = r.details or {}
+        
+        final_output.append({
+            "resume_id": r.resume_id,
+            "name": name,
+            "final_score": r.total_score,
+            "tfidf_score": details.get("bert", details.get("tfidf", 0.0)),
+            "skill_match_percentage": details.get("skill_match", 0.0),
+            "experience_years": details.get("experience", 0.0),
+            "matched_skills": details.get("matched_skills", []),
+            "missing_skills": details.get("missing_skills", []),
+            "explanation": details.get("explanation", ""),
+            "resume_text": resume.extracted_text if resume else ""
+        })
+        
+    return {
+        "job_description_content": job.content,
+        "job_description_id": job_id,
+        "ranked_candidates": final_output,
+        "processing_time": "0.0s (Loaded from History)"
+    }
+
+@router.delete("/history/jobs/{job_id}")
+async def delete_job_history(job_id: str, current_user: User = Depends(get_current_user)):
+    """Deletes a job and its associated results and resumes."""
+    job = await get_job_description(job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found.")
+        
+    await delete_job_description(job_id, current_user.id)
+    return {"message": "Job screening history successfully deleted."}
+
+@router.post("/history/jobs/{job_id}/email")
+async def email_candidates(
+    job_id: str,
+    payload: BatchEmailRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Emails the selected candidates based on match thresholds, 
+    with robust error handling, security checks, and HTML layouts.
+    """
+    # 1. Ownership validation
+    job = await get_job_description(job_id, current_user.id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found.")
+        
+    # 2. Path parameter cross-check validation:
+    # Ensure all candidate IDs belong to this job description.
+    rankings = await get_rankings_for_job(job_id)
+    job_resume_ids = {r.resume_id for r in rankings}
+    
+    # Filter the request list to only include candidate IDs that actually belong to this job
+    valid_candidate_ids = [c_id for c_id in payload.candidate_ids if c_id in job_resume_ids]
+    
+    if not valid_candidate_ids:
+        raise HTTPException(
+            status_code=400, 
+            detail="No valid candidate IDs found belonging to this screening."
+        )
+        
+    # Build a mapping of resume_id -> ranking_result
+    ranking_map = {r.resume_id: r for r in rankings}
+    
+    successful_count = 0
+    failed_count = 0
+    failures = []
+    
+    from app.core.email_service import send_candidate_email
+    
+    # 3. Batch Email Dispatch Loop with try-except
+    for resume_id in valid_candidate_ids:
+        name = None
+        email = None
+        try:
+            resume = await get_resume(resume_id, current_user.id)
+            if not resume:
+                raise Exception("Resume record not found.")
+                
+            # Extract email address
+            parsed_data = resume.parsed_data or {}
+            if "emails" in parsed_data and parsed_data["emails"]:
+                email = parsed_data["emails"][0]
+            else:
+                # Fallback parser if not pre-stored in parsed_data
+                from app.core.text_processor import TextProcessor
+                tp = TextProcessor()
+                prep = tp.preprocess(resume.extracted_text or "")
+                if prep.get("emails"):
+                    email = prep["emails"][0]
+                    
+            if not email:
+                raise Exception("No email address could be found in the candidate resume.")
+                
+            # Extract name
+            if "name" in parsed_data and parsed_data["name"]:
+                name = parsed_data["name"]
+            else:
+                name = email.split("@")[0] if email else f"Candidate-{resume_id[:4]}"
+                
+            score = ranking_map[resume_id].total_score
+            
+            # Send email
+            send_candidate_email(
+                to_email=email,
+                candidate_name=name,
+                score=score,
+                interview_threshold=payload.interview_threshold,
+                rejection_threshold=payload.rejection_threshold
+            )
+            successful_count += 1
+            
+        except Exception as e:
+            failed_count += 1
+            failures.append({
+                "candidate_id": resume_id,
+                "name": name if name else "Unknown Candidate",
+                "email": email if email else "Unknown Email",
+                "reason": str(e)
+            })
+            
+    return {
+        "successful_count": successful_count,
+        "failed_count": failed_count,
+        "failures": failures
+    }
 

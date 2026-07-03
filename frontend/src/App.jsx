@@ -1,7 +1,23 @@
-import { ScanEye, Github, FileText, BarChart3, History } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ScanEye, Github, FileText, History, LogOut } from 'lucide-react';
 import ResumeUploader from './components/ResumeUploader';
+import HistoryList from './components/HistoryList';
+import Auth from './components/Auth';
 
 function App() {
+  const [token, setToken] = useState(localStorage.getItem('talentlens_token') || null);
+  const [activeView, setActiveView] = useState('dashboard'); // 'dashboard' or 'history'
+
+  const handleLogin = (newToken) => {
+    localStorage.setItem('talentlens_token', newToken);
+    setToken(newToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('talentlens_token');
+    setToken(null);
+  };
+  
   return (
     <div className="min-h-screen flex flex-col font-sans text-slate-900 selection:bg-primary-100 selection:text-primary-900 overflow-x-hidden">
 
@@ -24,29 +40,57 @@ function App() {
             <span className="font-display font-bold text-xl tracking-tight text-slate-800">TalentLens <span className="text-primary-600">AI</span></span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
-            <a href="#" className="flex items-center gap-2 hover:text-primary-600 transition-colors">
+          {token && (
+            <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
+            <button 
+              onClick={() => setActiveView('dashboard')}
+              className={`flex items-center gap-2 transition-colors ${activeView === 'dashboard' ? 'text-primary-600 font-semibold' : 'hover:text-primary-600'}`}
+            >
               <FileText className="w-4 h-4" /> Dashboard
-            </a>
-            <a href="#" className="flex items-center gap-2 hover:text-primary-600 transition-colors">
+            </button>
+            <button 
+              onClick={() => setActiveView('history')}
+              className={`flex items-center gap-2 transition-colors ${activeView === 'history' ? 'text-primary-600 font-semibold' : 'hover:text-primary-600'}`}
+            >
               <History className="w-4 h-4" /> History
-            </a>
+            </button>
           </nav>
+          )}
 
           <div className="flex items-center gap-4">
             <a href="https://github.com" target="_blank" rel="noreferrer" className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-slate-100/50 rounded-full">
               <Github className="w-5 h-5" />
             </a>
-            <button className="hidden sm:flex px-4 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20">
-              Get Started
-            </button>
+            {token && (
+              <>
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-full bg-slate-900 text-white text-xs font-semibold hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/20"
+                >
+                  <FileText className="w-3.5 h-3.5" /> New Screening
+                </button>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                  title="Log out"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 py-12 px-4 sm:px-6">
-        <ResumeUploader />
+        {!token ? (
+          <Auth onLogin={handleLogin} />
+        ) : activeView === 'dashboard' ? (
+          <ResumeUploader token={token} />
+        ) : (
+          <HistoryList token={token} />
+        )}
       </main>
 
       {/* Footer */}

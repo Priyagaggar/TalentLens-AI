@@ -61,112 +61,35 @@ class SkillExtractor:
         # We search if the skill name (or alias) is "in" the text.
         # Partial ratio is good for finding "Python" in "I know Python programming".
         
-        normalized_text = text.lower() # Normalize text once
+        normalized_text = text.lower()
+        unique_tokens = set(normalized_text.split())
 
         for category, skills_list in self.skills_db.items():
             for skill_entry in skills_list:
                 skill_name = skill_entry["name"]
                 variations = [skill_name] + skill_entry.get("aliases", [])
                 
-                match_found = False
-                for variation in variations:
-                    # check for exact match first (fast)
-                    # We add word boundaries to regex or use simple find with padding
-                    # Simple find in lower case
-                    if f" {variation.lower()} " in f" {normalized_text} ":
-                        match_found = True
-                        break
-                    
-                    # Fuzzy match fallback
-                    # validation: 'fuzz.partial_ratio' finds substring matches.
-                    # score = fuzz.partial_ratio(variation.lower(), normalized_text)
-                    # if score >= threshold:
-                    #     match_found = True
-                    #     break
-                    
-                    # NOTE: fuzz.partial_ratio on the WHOLE text vs a short word like "Go" or "R"
-                    # gives many false positives. "Go" is in "Google". "R" is in "Really".
-                    # Hence, strict word boundary checks are better for short names.
-                    # Fuzzy is best for "ReactJS" vs "React.js" types.
-                    
-                    # Let's try token set ratio or just simple word boundary regex + specific variation handling.
-                    # Actually, for this task, the requirement asked for fuzzywuzzy.
-                    # safe usage: checking against tokens or sliding windows is best but complex.
-                    # Simpler 'fuzzy' usage: Check if variation is 'close enough' to any word in text?
-                    # No, that's O(N*M).
-                    
-                    # Compromise: Use simple word boundary search for strict correctness, 
-                    # and fuzzy match mainly for longer phrases or if exact fail?
-                    # Let's trust word boundary regex for short terms.
-                    # For "react.js" vs "React JS", we can normalize input text punctuation.
-                    
-                    pass 
-
-                # Re-implementing logic to be robust but efficient
-                # 1. Exact case-insensitive match with word boundaries is Gold Standard.
-                # 2. Fuzzy helps if user wrote "Pyton" instead of "Python".
-                
-                # Let's scan text for the variation with a lower threshold if length > 4 ch
-                # For short names (C, R, Go, git), exact match only to avoid noise.
-                
                 for variation in variations:
                     v_lower = variation.lower()
                     
-                    # Exactish match (case-insensitive word boundary)
-                    # We handle special chars for C++, C#
+                    # 1. Exact match (case-insensitive word boundary)
                     import re
                     escaped = re.escape(v_lower)
-                    # \b doesn't work well with C++ or C#. 
-                    # Custom boundary: start of string or non-word-char, end of string or non-word-char
-                    # But + is not a word char, so "C++" needs care.
-                    
-                    # A robust pattern for tech skills:
                     pattern = r'(?:^|[\s,.;\(\)\[\]])' + escaped + r'(?:$|[\s,.;\(\)\[\]])'
                     
                     if re.search(pattern, normalized_text):
                         found_skills[category].add(skill_name)
                         break
                         
-                    # Fuzzy match for typo tolerance (only for longer words)
-                    if len(v_lower) > 4:
-                        # We extract words from text that look similar?
-                        # Or token set ratio?
-                        # partial_ratio can still be noisy.
-                        # Let's skip expensive full-text fuzzy for now and assume the "fuzzy" requirement
-                        # implies "flexible matching" of aliases (which we do).
-                        # If strict "fuzzywuzzy" usage is mandated for typos:
-                        pass
-
-        # Verification of requirement "Use fuzzy matching to find skills even with typos (use fuzzywuzzy library)"
-        # To truly use fuzzywuzzy for typos effectively on a long text:
-        # We need to split text into words and match each word against the DB.
-        text_tokens = normalized_text.split()
-        
-        # This is O(TextLength * DBSize). With 100 skills and 500 word resume -> 50,000 checks. 
-        # Doable in python for one request.
-        
-        unique_tokens = set(text_tokens) # optimization
-        
-        for category, skills_list in self.skills_db.items():
-            for skill_entry in skills_list:
-                skill_name = skill_entry["name"]
-                variations = [skill_name] + skill_entry.get("aliases", [])
-                
-                # If we already found it via regex, skip
-                if skill_name in found_skills[category]:
-                    continue
-                
-                for variation in variations:
-                    if len(variation) < 4: continue # skip short names for fuzzy to avoid 'R'/'Go' noise
-                    
-                    # Find best match in tokens
-                    match = process.extractOne(variation, unique_tokens, scorer=fuzz.ratio)
-                    if match:
-                        best_token, score = match
-                        if score >= threshold:
-                            logger.info(f"Fuzzy match found: '{best_token}' -> '{skill_name}' (Score: {score})")
-                            found_skills[category].add(skill_name)
-                            break
+                    # 2. Fuzzy match for typo tolerance (only for longer words)
+                    if len(v_lower) >= 4:
+                        match = process.extractOne(variation, unique_tokens, scorer=fuzz.ratio)
+                        if match:
+                            best_token, score = match
+                            if score >= threshold:
+                                logger.info(f"Fuzzy match found: '{best_token}' -> '{skill_name}' (Score: {score})")
+                                found_skills[category].add(skill_name)
+                                break
 
         # Convert sets to sorted lists
         return {k: sorted(list(v)) for k, v in found_skills.items()}

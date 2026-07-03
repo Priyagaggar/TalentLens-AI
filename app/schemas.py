@@ -45,10 +45,18 @@ class RankedCandidate(BaseModel):
     matched_skills: List[str]
     missing_skills: List[str]
     explanation: str
+    resume_text: Optional[str] = None
 
 class BatchAnalysisResponse(BaseModel):
     ranked_candidates: List[RankedCandidate]
     processing_time: str
+    job_description_content: Optional[str] = None
+    job_description_id: Optional[str] = None
 
 class ErrorResponse(BaseModel):
     detail: str
+
+class BatchEmailRequest(BaseModel):
+    interview_threshold: float
+    rejection_threshold: float
+    candidate_ids: List[str]
