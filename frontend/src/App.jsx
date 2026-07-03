@@ -5,7 +5,10 @@ import HistoryList from './components/HistoryList';
 import Auth from './components/Auth';
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('talentlens_token') || null);
+  const [token, setToken] = useState(() => {
+    const saved = localStorage.getItem('talentlens_token');
+    return (saved && saved !== 'null' && saved !== 'undefined') ? saved : null;
+  });
   const [activeView, setActiveView] = useState('dashboard'); // 'dashboard' or 'history'
 
   const handleLogin = (newToken) => {

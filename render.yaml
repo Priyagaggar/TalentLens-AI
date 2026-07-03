@@ -41,7 +41,7 @@ services:
         fromService:
           type: web
           name: ai-resume-screener
-          property: host
+          property: url
     routes:
       - type: rewrite
         source: /*
