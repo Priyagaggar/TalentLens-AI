@@ -32,9 +32,8 @@ services:
       - key: MOCK_EMAIL
         value: 'true'
 
-  - type: web
+  - type: static
     name: talentlens-frontend
-    env: static
     buildCommand: cd frontend && npm install && npm run build
     staticPublishPath: frontend/dist
     envVars:
