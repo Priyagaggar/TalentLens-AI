@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { ScanEye, Loader2 } from 'lucide-react';
+import { getApiBaseUrl } from '../utils';
 
 const Auth = ({ onLogin }) => {
     const [isLogin, setIsLogin] = useState(true);
@@ -8,14 +9,6 @@ const Auth = ({ onLogin }) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState(null);
     const [loading, setLoading] = useState(false);
-
-    const getApiBaseUrl = () => {
-        let url = import.meta.env.VITE_API_URL;
-        if (!url) return "/api/v1";
-        if (url.endsWith('/')) url = url.slice(0, -1);
-        if (!url.endsWith('/api/v1')) url += '/api/v1';
-        return url;
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();

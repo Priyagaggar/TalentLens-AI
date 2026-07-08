@@ -17,7 +17,7 @@ import {
     Send,
     Loader2
 } from 'lucide-react';
-import { cn } from '../utils';
+import { cn, getApiBaseUrl } from '../utils';
 
 // Helper for gradient scores
 const getScoreColor = (score) => {
@@ -52,21 +52,6 @@ const Modal = ({ title, isOpen, onClose, children }) => {
             </div>
         </div>
     );
-};
-
-const getApiBaseUrl = () => {
-    let url = import.meta.env.VITE_API_URL;
-    if (!url) return "/api/v1";
-    if (!url.startsWith("http") && !url.startsWith("/")) url = `https://${url}`;
-    try {
-        const urlObj = new URL(url);
-        if (urlObj.hostname !== "localhost" && !urlObj.hostname.includes(".")) {
-            url = url.replace(urlObj.hostname, `${urlObj.hostname}.onrender.com`);
-        }
-    } catch (e) {}
-    if (url.endsWith("/")) url = url.slice(0, -1);
-    if (!url.endsWith("/api/v1")) url = `${url}/api/v1`;
-    return url;
 };
 
 const ResultsDashboard = ({ results, token }) => {

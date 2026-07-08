@@ -2,21 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Clock, ChevronRight, Loader2, FileText, ArrowLeft, Trash2 } from 'lucide-react';
 import ResultsDashboard from './ResultsDashboard';
-
-const getApiBaseUrl = () => {
-    let url = import.meta.env.VITE_API_URL;
-    if (!url) return "/api/v1";
-    if (!url.startsWith("http") && !url.startsWith("/")) url = `https://${url}`;
-    try {
-        const urlObj = new URL(url);
-        if (urlObj.hostname !== "localhost" && !urlObj.hostname.includes(".")) {
-            url = url.replace(urlObj.hostname, `${urlObj.hostname}.onrender.com`);
-        }
-    } catch (e) {}
-    if (url.endsWith("/")) url = url.slice(0, -1);
-    if (!url.endsWith("/api/v1")) url = `${url}/api/v1`;
-    return url;
-};
+import { getApiBaseUrl } from '../utils';
 
 const API_BASE_URL = getApiBaseUrl();
 
