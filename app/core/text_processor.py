@@ -5,37 +5,33 @@ import logging
 from typing import List, Set, Dict
 
 import nltk
-import spacy
 from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class TextProcessor:
-    def __init__(self, spacy_model: str = "en_core_web_sm"):
+    def __init__(self):
         """
-        Initialize the TextProcessor with NLTK resources and SpaCy model.
+        Initialize the TextProcessor with NLTK resources only.
+        SpaCy has been removed to reduce memory usage on Render free tier (512MB limit).
+        Lemmatization is now handled by NLTK's WordNetLemmatizer (lightweight).
         """
-        logger.info("Initializing TextProcessor...")
+        logger.info("Initializing TextProcessor (lightweight NLTK-only mode)...")
         
         # Ensure NLTK resources are available
-        try:
-            nltk.data.find('corpora/stopwords')
-        except LookupError:
-            logger.info("Downloading NLTK stopwords...")
-            nltk.download('stopwords')
+        for resource in ['corpora/stopwords', 'corpora/wordnet', 'tokenizers/punkt']:
+            try:
+                nltk.data.find(resource)
+            except LookupError:
+                name = resource.split('/')[-1]
+                logger.info(f"Downloading NLTK resource: {name}...")
+                nltk.download(name, quiet=True)
             
         self.stop_words = set(stopwords.words('english'))
-        
-        # Load SpaCy model
-        try:
-            self.nlp = spacy.load(spacy_model)
-        except OSError:
-            logger.warning(f"SpaCy model '{spacy_model}' not found. Downloading...")
-            from spacy.cli import download
-            download(spacy_model)
-            self.nlp = spacy.load(spacy_model)
+        self._lemmatizer = WordNetLemmatizer()
 
         # Define a common skills database (can be expanded)
         self.skills_db = {
@@ -51,21 +47,8 @@ class TextProcessor:
         """
         Removes special characters and extra whitespace.
         """
-        # Remove special characters (keep alphanumeric and basic punctuation)
-        # We replace newline characters with spaces to handle multi-line sentences
         text = text.replace('\n', ' ')
-        
-        # Remove non-ascii characters usually found in resumes (bullet points etc)
         text = re.sub(r'[^\x00-\x7F]+', ' ', text)
-        
-        # Remove specific special chars but keep some useful for context (like + for C++, # for C#)
-        # This regex keeps alphanumeric, whitespace, and @ (email), + (C++), # (C#), . (Node.js)
-        # But for general cleaning we often want to be stricter.
-        # Let's do a general clean but preserve key tech symbols if possible.
-        # Ideally, we clean *after* extraction, but here we are preparing for NLP.
-        # For simplicity: Keep alphanumeric and spaces.
-        # Note: Skills like "C++" needs special handling if we strip '+'.
-        # Strategy: Standardize whitespace first.
         text = re.sub(r'\s+', ' ', text).strip()
         return text
 
@@ -85,10 +68,11 @@ class TextProcessor:
 
     def lemmatize_text(self, text: str) -> str:
         """
-        Lemmatizes text using SpaCy.
+        Lemmatizes text using NLTK WordNetLemmatizer (lightweight, no SpaCy required).
         """
-        doc = self.nlp(text)
-        return " ".join([token.lemma_ for token in doc])
+        tokens = text.split()
+        lemmatized = [self._lemmatizer.lemmatize(token) for token in tokens]
+        return " ".join(lemmatized)
 
     def extract_emails(self, text: str) -> List[str]:
         """
@@ -100,43 +84,24 @@ class TextProcessor:
     def extract_phone_numbers(self, text: str) -> List[str]:
         """
         Extracts phone numbers using regex.
-        Supports various formats:
-        - (123) 456-7890
-        - 123-456-7890
-        - +1 123 456 7890
         """
-        # This pattern is quite permissive to catch international formats
-        phone_pattern = r'(\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}'
-        matches = re.findall(phone_pattern, text)
-        # re.findall with groups returns tuples. We need to reconstruct or simply use a non-grouping regex or filter.
-        # Let's use a simpler approach that captures the whole string for list return
-        # Using finditer is safer to get the whole match
-        
+        phone_pattern = r'(\+?\d{1,3}[-.\\s]?)?(\(?\d{3}\)?[-.\\s]?)?\d{3}[-.\\s]?\d{4}'
         matches = []
         for match in re.finditer(phone_pattern, text):
             matches.append(match.group())
-        
-        # Filter out short numbers (false positives)
         return [m.strip() for m in matches if len(re.sub(r'\D', '', m)) >= 10]
 
     def extract_skills(self, text: str) -> List[str]:
         """
         Extracts skills present in the text based on the predefined skills database.
-        Includes handling for phrase matching.
         """
         normalized_text = self.normalize_text(text)
         found_skills = set()
-        
-        # Simple token/phrase matching
-        # For more complex matching, SpaCy EntityRuler is better, but this suffices for 'beginner-friendly'
         for skill in self.skills_db:
-            # We enforce word boundaries to avoid finding "c" in "cloud" or "go" in "google"
-            # escape skill for regex
             escaped_skill = re.escape(skill)
             pattern = r'\b' + escaped_skill + r'\b'
             if re.search(pattern, normalized_text):
                 found_skills.add(skill)
-        
         return list(found_skills)
 
     def preprocess(self, text: str) -> Dict[str, any]:
@@ -144,18 +109,13 @@ class TextProcessor:
         Runs the full pipeline to clean text and extract metadata.
         Returns a dictionary with cleaned text and extracted entities.
         """
-        # 1. Extraction (before heavy cleaning that might remove special chars needed for emails)
         emails = self.extract_emails(text)
         phones = self.extract_phone_numbers(text)
-        
-        # 2. Cleaning Pipeline
         cleaned = self.clean_text(text)
         normalized = self.normalize_text(cleaned)
         no_stopwords = self.remove_stopwords(normalized)
         lemmatized = self.lemmatize_text(no_stopwords)
-        
-        # 3. Skill Extraction (on normalized text)
-        skills = self.extract_skills(cleaned) # Use cleaned (preserves case if needed? actually extract_skills normalizes)
+        skills = self.extract_skills(cleaned)
 
         return {
             "original_text": text,
@@ -167,9 +127,7 @@ class TextProcessor:
         }
 
 if __name__ == "__main__":
-    # Self-test
     processor = TextProcessor()
-    
     sample_text = """
     Jane Doe
     jane.doe@example.com | (555) 123-4567
@@ -177,11 +135,9 @@ if __name__ == "__main__":
     Experienced Software Engineer with 5 years in Python, FastAPI, and Machine Learning.
     Skilled in Docker, AWS, and Git.
     """
-    
     print("--- Processing Sample Text ---")
     results = processor.preprocess(sample_text)
-    
     print(f"Emails: {results['emails']}")
     print(f"Phones: {results['phone_numbers']}")
     print(f"Skills: {results['skills']}")
-    print(f"Lemmatized: {results['lemmatized_text']}")
+    print(f"Lemmatized (first 100 chars): {results['lemmatized_text'][:100]}")
