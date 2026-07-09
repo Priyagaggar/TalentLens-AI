@@ -1,6 +1,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.config import settings
 from app.api.endpoints import router as api_router
@@ -43,9 +44,9 @@ if settings.BACKEND_CORS_ORIGINS:
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
-    return {"message": "Welcome to the TalentLens AI API"}
+    return RedirectResponse(url="/docs")
 
 @app.get("/health")
 async def health_check():
