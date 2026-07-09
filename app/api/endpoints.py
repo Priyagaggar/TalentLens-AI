@@ -550,6 +550,7 @@ async def email_candidates(
     failures = []
     
     from app.core.email_service import send_candidate_email
+    import time
     
     # 3. Batch Email Dispatch Loop with try-except
     for resume_id in valid_candidate_ids:
@@ -592,6 +593,9 @@ async def email_candidates(
                 rejection_threshold=payload.rejection_threshold
             )
             successful_count += 1
+            
+            # Respect Mailtrap sandbox rate limit (1 email/second max on free plan)
+            time.sleep(1.5)
             
         except Exception as e:
             failed_count += 1
