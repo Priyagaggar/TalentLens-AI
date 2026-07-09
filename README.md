@@ -1,143 +1,280 @@
 # TalentLens AI 🚀
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.10-blue.svg)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688.svg)
-![React](https://img.shields.io/badge/React-18-61dafb.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ed.svg)
+![Python](https://img.shields.io/badge/Python-3.11-3776ab?style=flat&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=flat&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61dafb?style=flat&logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Free_Tier-336791?style=flat&logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat)
+![Deployed on Render](https://img.shields.io/badge/Deployed_on-Render-46E3B7?style=flat&logo=render&logoColor=white)
 
-> **An intelligent, automated resume screening system that uses NLP and Machine Learning to rank candidates against job descriptions, manage history, and automate recruiter outreach with styled email templates.**
+> **An intelligent, automated resume screening system that uses NLP and Machine Learning to rank candidates against job descriptions, manage screening history, and automate recruiter outreach with professional email workflows.**
+
+---
+
+## 🌐 Live Demo
+
+| Service | URL |
+|---|---|
+| 🖥️ **Frontend App** | [talentlens-frontend-t7go.onrender.com](https://talentlens-frontend-t7go.onrender.com) |
+| 📡 **API Docs (Swagger)** | [ai-resume-screener-1qf8.onrender.com/docs](https://ai-resume-screener-1qf8.onrender.com/docs) |
+
+> ⚠️ Hosted on Render's free tier. The backend may take **30–60 seconds** to wake up on first visit after inactivity.
 
 ---
 
 ## 🌟 Key Features
 
-*   **📄 Universal Parsing**: Robustly extracts text from **PDF**, **DOCX**, and **TXT** files, parsing candidate info in-memory.
-*   **🧠 Advanced NLP Pipeline**:
-    *   **Entity Extraction**: Identifies emails, phone numbers, and names.
-    *   **Skill Extraction**: Employs fuzzy keyword matching against a predefined skills taxonomy.
-    *   **Experience Calculation**: Computes total years of experience using date regex patterns.
-*   **🎯 Intelligent Ranking**:
-    *   **Semantic Matching**: Uses SentenceTransformer BERT embeddings (`all-MiniLM-L6-v2`) to measure textual similarity between resumes and JDs.
-    *   **Weighted Scoring**: Custom composite index combining Content Match (40%), Skill Match (40%), and Experience (20%).
-    *   **Explainable AI**: Returns structured feedback explaining candidate matches.
-*   **🔐 Auth & Multi-Tenancy**:
-    *   **JWT Security**: Register and login securely using encrypted passwords (`bcrypt`).
-    *   **Recruiter Isolation**: Multi-tenant database architecture. Recruiters can only access, delete, and email candidates from screenings they own.
-*   **📧 Automated Email Workflows**:
-    *   **Three-Tier Routing**: Tailors communication dynamically based on candidate score. Top matches get an **Interview Invitation** (with CTA booking links), middling candidates get a **Keep-in-Touch holding notice**, and low scorers get a **Polite Rejection**.
-    *   **Dynamic Thresholds**: Select candidates and adjust Invite/Rejection scores using sliding controllers on the UI before sending.
-    *   **Error-Tolerant Batching**: Performs batch sends with a try-except layer, returning a detailed success/failure report instead of failing the batch.
-    *   **Developer Sandbox**: Integrates with **Mailtrap** SMTP for testing, with a local **HTML Mock Logger** (`mock_emails.html`) to visually preview templates locally behind corporate firewalls.
-*   **📊 History & Management**:
-    *   Dynamic history dashboard with auto-conversion to user's local timezone.
-    *   Clean job title parser that strips markdown tags to keep the history list neat.
-    *   Screening deletion (cascades database records to clean up unused resumes/results).
-    *   Modal triggers to inspect original Job Description and Resume texts directly.
+### 📄 Universal Resume Parsing
+- Extracts text from **PDF**, **DOCX**, and **TXT** files
+- Automatically parses candidate **email addresses**, **phone numbers**, and **names**
+- Handles multi-column layouts, bullet points, and unicode characters
+
+### 🧠 Multi-Layer NLP Scoring Pipeline
+Each resume is scored against the job description using a **composite weighted index**:
+
+| Component | Weight | Method |
+|---|---|---|
+| **Content Match** | 40% | Semantic similarity via HuggingFace Inference API (BERT `all-MiniLM-L6-v2`) with TF-IDF cosine fallback |
+| **Skill Match** | 40% | FuzzyWuzzy fuzzy keyword matching against a structured skills taxonomy |
+| **Experience** | 20% | Date regex extraction to compute total years of experience |
+
+### 🎯 Intelligent Candidate Ranking
+- Ranks all uploaded candidates by composite score in a single batch
+- Custom **adjustable thresholds** for interview invite and rejection via UI sliders
+- Returns structured per-candidate feedback explaining match results
+
+### 🔐 JWT Authentication & Multi-Tenancy
+- Secure recruiter registration and login with **bcrypt** password hashing
+- **JWT bearer tokens** for all protected endpoints
+- Strict recruiter isolation — recruiters can only access their own screenings and candidates
+
+### 📧 Automated Email Workflows
+- **Three-tier smart routing** based on candidate score:
+  - ✅ **High score** → Congratulations + Interview invite
+  - 🔄 **Mid score** → Application under review notice
+  - ❌ **Low score** → Polite, professional rejection
+- **Batch email dispatch** to multiple selected candidates in one click
+- Rate-limit-aware delivery (1.5s delay between sends for Mailtrap sandbox compliance)
+- Integrated with **Mailtrap SMTP sandbox** for safe, visual email testing
+- Error-tolerant batching — returns per-candidate success/failure report
+
+### 📊 History & Management Dashboard
+- View all past screenings with timestamps (auto-converted to local timezone)
+- Inspect original job descriptions and resume texts via modals
+- Delete screenings with full cascade (removes all associated records)
+- Clean job title display (strips markdown/formatting artifacts)
 
 ---
 
 ## 🏗️ Architecture
 
-### System Diagram
-The system follows a modern client-server architecture:
-
-1.  **Frontend (React/Vite)**: Renders the drag-and-drop uploader, history lists, email configuration modals, and results cards.
-2.  **API Gateway (FastAPI)**: Manages authentication, endpoint routing, schemas validation, and SMTP dispatches.
-3.  **Processing Engine**:
-    *   **Extractors**: Parsers for PDF, DOCX, and TXT.
-    *   **Advanced Scorer**: SentenceTransformer lazy-loader that batches and calculates cosine similarities.
-4.  **Database (SQLite/PostgreSQL)**: Persists registered users, job descriptions, resumes, and evaluation results.
+```
+┌─────────────────────────────────┐
+│        React Frontend           │
+│  (Vite + TailwindCSS)           │
+│  Drag-drop upload, Results UI,  │
+│  History, Email config modals   │
+└──────────────┬──────────────────┘
+               │ HTTPS (Axios)
+               ▼
+┌─────────────────────────────────┐
+│       FastAPI Backend           │
+│  Auth, Routing, Validation,     │
+│  SMTP Dispatch, CORS            │
+└───┬───────────┬─────────────────┘
+    │           │
+    ▼           ▼
+┌───────┐  ┌──────────────────────┐
+│  DB   │  │   Processing Engine  │
+│  PG/  │  │  ┌────────────────┐  │
+│ SQLite│  │  │ PDF/DOCX Parser│  │
+└───────┘  │  ├────────────────┤  │
+           │  │ NLTK Processor │  │
+           │  ├────────────────┤  │
+           │  │ FuzzyWuzzy     │  │
+           │  │ Skill Matcher  │  │
+           │  ├────────────────┤  │
+           │  │ HuggingFace    │  │
+           │  │ Inference API  │  │
+           │  │ (BERT / TF-IDF)│  │
+           │  └────────────────┘  │
+           └──────────────────────┘
+```
 
 ---
 
-## 🚀 Installation & Setup
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 18, Vite, TailwindCSS, Axios |
+| **Backend** | Python 3.11, FastAPI, Uvicorn |
+| **Auth** | JWT (`PyJWT`), bcrypt (`passlib`) |
+| **NLP / AI** | NLTK, FuzzyWuzzy, scikit-learn (TF-IDF), HuggingFace Inference API (BERT) |
+| **File Parsing** | pypdf, python-docx, pdfplumber |
+| **Database** | PostgreSQL (production), SQLite (local development) |
+| **ORM** | SQLAlchemy (async) |
+| **Email** | SMTP via Mailtrap sandbox |
+| **Deployment** | Render (Web Service + Static Site + PostgreSQL) |
+
+---
+
+## 🚀 Installation & Local Setup
 
 ### Prerequisites
-*   Python 3.10+
-*   Node.js 16+
-*   Docker & Docker Compose (optional)
+- Python 3.11+
+- Node.js 18+
 
-### Environment Variables
-Create a `.env` file in the root folder of your project:
-```ini
-PROJECT_NAME="TalentLens AI"
-DATABASE_URL="sqlite+aiosqlite:///./sql_app.db"
-
-# JWT Auth Settings
-SECRET_KEY="your-secret-key-change-in-prod"
-ALGORITHM="HS256"
-
-# Email SMTP Settings (Mailtrap sandbox example)
-SMTP_HOST="sandbox.smtp.mailtrap.io"
-SMTP_PORT=2525
-SMTP_USER="your_mailtrap_smtp_user"
-SMTP_PASSWORD="your_mailtrap_smtp_password"
-SENDER_EMAIL="noreply@talentlens.ai"
-
-# Developer Mock Mode (Bypasses network blocks/firewalls and outputs mock HTML logs)
-MOCK_EMAIL=true
+### 1. Clone the repository
+```bash
+git clone https://github.com/Priyagaggar/TalentLens-AI.git
+cd TalentLens-AI
 ```
 
-### Installation
-The project includes a launcher script (`run.bat`) for Windows users to spin up both servers concurrently.
+### 2. Create your `.env` file
+Create a `.env` file in the project root:
+```ini
+# Database (SQLite for local dev)
+DATABASE_URL=sqlite+aiosqlite:///./sql_app.db
+
+# JWT Auth
+SECRET_KEY=your-secret-key-change-in-production
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+
+# HuggingFace Inference API (free - get token at huggingface.co)
+HF_API_TOKEN=hf_your_token_here
+
+# Email SMTP - Mailtrap sandbox (get credentials at mailtrap.io)
+SMTP_HOST=sandbox.smtp.mailtrap.io
+SMTP_PORT=2525
+SMTP_USER=your_mailtrap_smtp_user
+SMTP_PASSWORD=your_mailtrap_smtp_password
+SENDER_EMAIL=noreply@talentlens.ai
+MOCK_EMAIL=false
+```
+
+> **Getting your free tokens:**
+> - **HF_API_TOKEN**: Sign up at [huggingface.co](https://huggingface.co) → Settings → Access Tokens → New Token (Read)
+> - **Mailtrap SMTP**: Sign up at [mailtrap.io](https://mailtrap.io) → Email Testing → Inboxes → SMTP Settings
+
+### 3. Install & run
+The project includes a launcher script (`run.bat`) that starts both servers concurrently on Windows:
 ```bash
-# 1. Install Python dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# 2. Install React frontend dependencies
+# Install React dependencies
 cd frontend
 npm install
 cd ..
 
-# 3. Start the application
+# Start both servers
 .\run.bat
 ```
-- Access the **Frontend** at `http://localhost:5173`
-- Access the **API documentation** at `http://localhost:8000/docs`
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| Backend API | http://localhost:8000 |
+| Swagger Docs | http://localhost:8000/docs |
 
 ---
 
-## 📡 Core API Endpoints
+## 📡 API Endpoints
 
-### 1. Authentication
-*   `POST /api/v1/auth/register`: Create a new recruiter account.
-*   `POST /api/v1/auth/login`: Exchange credentials for a JWT bearer token.
+### Authentication
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/auth/register` | Create a new recruiter account |
+| `POST` | `/api/v1/auth/login` | Login and receive a JWT token |
 
-### 2. Screening
-*   `POST /api/v1/upload/resumes`: Upload files and get temporary storage UUIDs.
-*   `POST /api/v1/analyze/batch`: Run NLP extraction, BERT cosine comparisons, and save results.
+### Screening
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/upload/resumes` | Upload resume files (PDF/DOCX/TXT), returns UUIDs |
+| `POST` | `/api/v1/analyze/batch` | Run NLP scoring pipeline and rank all candidates |
 
-### 3. History & Communications
-*   `GET /api/v1/history/jobs`: Retrieve list of past job screenings.
-*   `GET /api/v1/history/jobs/{job_id}/results`: Retrieve candidate rankings, job description content, and resume texts.
-*   `DELETE /api/v1/history/jobs/{job_id}`: Delete a past job screening and all its records.
-*   `POST /api/v1/history/jobs/{job_id}/email`: Trigger batch emails to selected candidates with HTML templates.
+### History & Communications
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/history/jobs` | List all past screenings for the logged-in recruiter |
+| `GET` | `/api/v1/history/jobs/{job_id}/results` | Get full ranking results for a screening |
+| `DELETE` | `/api/v1/history/jobs/{job_id}` | Delete a screening and all its records |
+| `POST` | `/api/v1/history/jobs/{job_id}/email` | Batch email selected candidates |
 
 ---
 
-## 🛠️ Project Structure
+## 📁 Project Structure
 
 ```
 TalentLens-AI/
 ├── app/
-│   ├── api/            # Router endpoints (auth, screenings)
-│   ├── core/           # Text processing, BERT scoring, SMTP mailer
-│   │   ├── advanced_matcher.py
-│   │   ├── email_service.py
-│   │   └── ...
-│   ├── db/             # SQLAlchemy schemas & CRUD operations
-│   └── schemas.py      # Pydantic models
-├── frontend/           # React Application
+│   ├── api/
+│   │   ├── auth.py              # JWT auth endpoints & token logic
+│   │   └── endpoints.py         # All screening & history endpoints
+│   ├── core/
+│   │   ├── advanced_matcher.py  # HuggingFace API + TF-IDF similarity scoring
+│   │   ├── skill_extractor.py   # FuzzyWuzzy skill extraction from resume text
+│   │   ├── skill_matcher.py     # Skill comparison between resume and JD
+│   │   ├── experience_extractor.py  # Date regex → years of experience
+│   │   ├── text_processor.py    # NLTK cleaning & lemmatization
+│   │   ├── ranker.py            # Composite score calculator & sorter
+│   │   ├── pdf_extractor.py     # PDF text extraction
+│   │   ├── docx_extractor.py    # DOCX text extraction
+│   │   └── email_service.py     # SMTP email builder & dispatcher
+│   ├── db/
+│   │   ├── database.py          # SQLAlchemy async engine & CRUD helpers
+│   │   └── models.py            # ORM models (User, Job, Resume, Ranking)
+│   ├── config.py                # Pydantic settings (reads from .env)
+│   ├── main.py                  # FastAPI app, CORS, lifespan
+│   └── schemas.py               # Pydantic request/response schemas
+├── frontend/                    # React + Vite application
 │   ├── src/
-│   │   ├── components/ # ResultsDashboard, HistoryList, Auth views
-│   │   └── ...
-├── tests/              # Test suite (pytest)
-├── requirements.txt    # Python requirements
-└── run.bat             # Batch launcher script
+│   │   ├── components/          # UI components (Upload, Results, History, Auth)
+│   │   └── App.jsx              # Root component & routing
+│   └── package.json
+├── data/
+│   └── skills_database.json     # Structured skills taxonomy for matching
+├── scripts/
+│   └── init_db.py               # Database initialisation script
+├── requirements.txt             # Python dependencies
+├── render.yaml                  # Render deployment configuration
+├── run.bat                      # Windows local dev launcher
+└── start.sh                     # Render startup script
 ```
 
 ---
 
+## ⚙️ Deployment (Render)
+
+This project is configured for one-click deployment on Render via `render.yaml`:
+
+- **`ai-resume-screener`** — Python Web Service (FastAPI backend)
+- **`talentlens-frontend`** — Static Site (React frontend built with Vite)
+- **`resume-db`** — PostgreSQL database (free tier)
+
+After deploying, set the following environment variables in the Render dashboard under the backend service:
+
+| Key | Value |
+|---|---|
+| `HF_API_TOKEN` | Your HuggingFace access token |
+| `SMTP_USER` | Your Mailtrap sandbox SMTP username |
+| `SMTP_PASSWORD` | Your Mailtrap sandbox SMTP password |
+| `MOCK_EMAIL` | `false` |
+| `SECRET_KEY` | A strong random string for JWT signing |
+
+---
+
+## 🗺️ Roadmap
+
+- [ ] Docker + Docker Compose support for one-command local setup
+- [ ] Resume parsing improvements (multi-column PDF layouts)
+- [ ] Export rankings to CSV/PDF
+- [ ] Candidate pipeline stages (shortlisted, interviewed, offered)
+
+---
+
 ## 📄 License
-This project is licensed under the MIT License.
+
+This project is licensed under the [MIT License](LICENSE).
