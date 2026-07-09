@@ -34,7 +34,7 @@ Each resume is scored against the job description using a **composite weighted i
 
 | Component | Weight | Method |
 |---|---|---|
-| **Content Match** | 40% | Semantic similarity via HuggingFace Inference API (BERT `all-MiniLM-L6-v2`) with TF-IDF cosine fallback |
+| **Content Match** | 40% | HuggingFace Inference API (BERT `all-MiniLM-L6-v2`) — automatically falls back to TF-IDF cosine similarity if the API is unavailable |
 | **Skill Match** | 40% | FuzzyWuzzy fuzzy keyword matching against a structured skills taxonomy |
 | **Experience** | 20% | Date regex extraction to compute total years of experience |
 
