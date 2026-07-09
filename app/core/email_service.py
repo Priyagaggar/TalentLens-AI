@@ -74,20 +74,37 @@ def send_candidate_email(to_email: str, candidate_name: str, score: float, inter
     
     # 1. Determine template context & thresholds
     if score >= interview_threshold:
-        subject = f"TalentLens AI: Next Steps for your Application!"
-        message = f"We are thrilled to let you know that your resume scored a high match of {score:.1f}% against our job description! We would love to schedule a brief screening call to learn more about you."
-        cta_text = "Schedule Interview"
+        subject = "Congratulations! Next Steps for Your Application"
+        message = (
+            "We have reviewed your application and are pleased to inform you that "
+            "your profile strongly aligns with what we are looking for. "
+            "We would love to move forward and invite you for a screening interview. "
+            "Please use the link below to schedule a time that works best for you. "
+            "We look forward to connecting with you!"
+        )
+        cta_text = "Schedule Your Interview"
         cta_link = "https://calendly.com"
     elif score < rejection_threshold:
-        subject = f"Your application status update"
-        message = f"Thank you so much for your interest and for taking the time to apply. While your profile showed valuable experience, we decided to move forward with other candidates whose skillsets align more closely with our current requirements. We appreciate your time and wish you the absolute best in your search."
+        subject = "Update on Your Application"
+        message = (
+            "Thank you so much for taking the time to apply and for your interest in this opportunity. "
+            "After carefully reviewing all applications, we have decided to move forward with other candidates "
+            "whose experience more closely matches our current requirements. "
+            "This was a competitive process and we genuinely appreciate the effort you put into your application. "
+            "We encourage you to keep an eye on future openings and wish you all the very best in your career journey."
+        )
         cta_text = None
         cta_link = None
     else:
-        subject = f"Update regarding your application"
-        message = f"Thank you for submitting your resume. Our team has run an initial compatibility screening and your profile matched at {score:.1f}%. We are currently evaluating all applications and will keep your profile in our active pipeline for review."
-        cta_text = "View Career Portal"
-        cta_link = "https://example.com/careers"
+        subject = "Your Application Is Under Review"
+        message = (
+            "Thank you for submitting your application. We wanted to let you know that "
+            "we have received your resume and our hiring team is currently reviewing all applications. "
+            "Your profile is being considered and we will be in touch with the next steps shortly. "
+            "We appreciate your patience and thank you for your interest in joining our team."
+        )
+        cta_text = None
+        cta_link = None
         
     html_content = get_styled_html_template(
         candidate_name=candidate_name,
